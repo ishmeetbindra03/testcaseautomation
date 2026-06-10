@@ -1,0 +1,3 @@
+google-cloud-ces==0.6.0
+google-cloud-aiplatform==1.156.0
+google-adk[a2a]==2.1.0

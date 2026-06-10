@@ -1,0 +1,7 @@
+[project]
+name = "qa-agent"
+version = "0.1.0"
+description = "Agentic QA Agent Demo"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
