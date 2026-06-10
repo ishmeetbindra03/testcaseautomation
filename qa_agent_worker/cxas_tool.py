@@ -1,5 +1,19 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from google.cloud import ces_v1
 
@@ -40,68 +54,94 @@ def _unwrap(val) -> Any:
     return str(pb_val)
 
 
-def _extract_tool_calls_and_variables(
-    response,
-) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """Extracts correlated tool calls/responses and all session variables from the run response."""
-    session_state = {}
+def _process_single_output(
+    output, current_session_state: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Processes a single output, updating the running state and extracting tool calls."""
+    pb_output = getattr(output, "_pb", output)
+    text = getattr(pb_output, "text", "")
+
     tool_calls_map = {}
 
-    if not response.outputs:
-        return [], session_state
+    # Check for diagnostic info which contains the variables and tool calls
+    if hasattr(pb_output, "diagnostic_info") and pb_output.diagnostic_info:
+        diag = pb_output.diagnostic_info
+        if hasattr(diag, "messages") and diag.messages:
+            for message in diag.messages:
+                for chunk in message.chunks:
+                    pb_chunk = getattr(chunk, "_pb", chunk)
 
-    # Traverse through all conversational diagnostic messages
-    for message in response.outputs[0].diagnostic_info.messages:
-        for chunk in message.chunks:
-            pb_chunk = getattr(chunk, "_pb", chunk)
+                    # 1. Extract and update session variables
+                    if (
+                        hasattr(pb_chunk, "default_variables")
+                        and pb_chunk.default_variables
+                    ):
+                        items = getattr(
+                            pb_chunk.default_variables,
+                            "fields",
+                            pb_chunk.default_variables,
+                        ).items()
+                        for key, val_obj in items:
+                            current_session_state[key] = _unwrap(val_obj)
 
-            # 1. Extract and update session variables
-            if hasattr(pb_chunk, "default_variables") and pb_chunk.default_variables:
-                for key, val_obj in pb_chunk.default_variables.items():
-                    session_state[key] = _unwrap(val_obj)
+                    if (
+                        hasattr(pb_chunk, "updated_variables")
+                        and pb_chunk.updated_variables
+                    ):
+                        items = getattr(
+                            pb_chunk.updated_variables,
+                            "fields",
+                            pb_chunk.updated_variables,
+                        ).items()
+                        for key, val_obj in items:
+                            current_session_state[key] = _unwrap(val_obj)
 
-            if hasattr(pb_chunk, "updated_variables") and pb_chunk.updated_variables:
-                for key, val_obj in pb_chunk.updated_variables.items():
-                    session_state[key] = _unwrap(val_obj)
+                    # 2. Extract tool calls (inputs)
+                    if (
+                        hasattr(pb_chunk, "tool_call")
+                        and pb_chunk.tool_call
+                        and pb_chunk.tool_call.id
+                    ):
+                        tc = pb_chunk.tool_call
+                        tool_calls_map[tc.id] = {
+                            "id": tc.id,
+                            "name": getattr(tc, "display_name", ""),
+                            "parameters": _unwrap(tc.args)
+                            if getattr(tc, "args", None)
+                            else {},
+                            "output": None,
+                        }
 
-            # 2. Extract tool calls (inputs)
-            if (
-                hasattr(pb_chunk, "tool_call")
-                and pb_chunk.tool_call
-                and pb_chunk.tool_call.id
-            ):
-                tc = pb_chunk.tool_call
-                tc_id = tc.id
-                parameters = _unwrap(tc.args) if tc.args else {}
+                    # 3. Extract tool responses (outputs)
+                    if (
+                        hasattr(pb_chunk, "tool_response")
+                        and pb_chunk.tool_response
+                        and pb_chunk.tool_response.id
+                    ):
+                        tr = pb_chunk.tool_response
+                        out_val = (
+                            _unwrap(tr.response)
+                            if getattr(tr, "response", None)
+                            else {}
+                        )
+                        if tr.id in tool_calls_map:
+                            tool_calls_map[tr.id]["output"] = out_val
+                        else:
+                            tool_calls_map[tr.id] = {
+                                "id": tr.id,
+                                "name": getattr(tr, "display_name", ""),
+                                "parameters": None,
+                                "output": out_val,
+                            }
 
-                tool_calls_map[tc_id] = {
-                    "id": tc_id,
-                    "name": tc.display_name,
-                    "parameters": parameters,
-                    "output": None,  # Will be populated when we process the matching tool_response
-                }
-
-            # 3. Extract tool responses (outputs)
-            if (
-                hasattr(pb_chunk, "tool_response")
-                and pb_chunk.tool_response
-                and pb_chunk.tool_response.id
-            ):
-                tr = pb_chunk.tool_response
-                tr_id = tr.id
-                output = _unwrap(tr.response) if tr.response else {}
-
-                if tr_id in tool_calls_map:
-                    tool_calls_map[tr_id]["output"] = output
-                else:
-                    tool_calls_map[tr_id] = {
-                        "id": tr_id,
-                        "name": tr.display_name,
-                        "parameters": None,
-                        "output": output,
-                    }
-
-    return list(tool_calls_map.values()), session_state
+    return {
+        "text": text,
+        "session_variables": dict(
+            current_session_state
+        ),  # Take a snapshot of variables for this output
+        "tool_calls": list(tool_calls_map.values()),
+        "end_session": getattr(pb_output, "end_session", False),
+    }
 
 
 def generate_session_id() -> str:
@@ -133,12 +173,10 @@ def send_message_to_cx_agent(
 
     Returns:
         dict:
-            text (str): the response from the agent
-            tool_calls (list[dict]): the tool calls that the agent executed for the turn
-            session_variables (dict[str, Any]): the variables that the agent set for the turn
             session_id (str): The session id
+            agent_messages (list[dict]): A list of messages (text, variables, tool_calls) output by the agent
+            raw_response (str): The raw string response
     """
-
     # 1. Initialize the Session client
     client = ces_v1.SessionServiceClient()
 
@@ -147,7 +185,6 @@ def send_message_to_cx_agent(
 
     # 3. Create the session configuration
     config = ces_v1.SessionConfig(session=session_path)
-
     inputs = []
 
     # 4. Create the user input
@@ -165,19 +202,31 @@ def send_message_to_cx_agent(
     try:
         response = client.run_session(request=request)
 
-        # 7. Extract data
-        tool_calls, session_vars = _extract_tool_calls_and_variables(response)
+        agent_messages = []
+        current_session_state = {}  # Tracks cumulative variables across multiple outputs
         session_ended = False
 
-        if response.outputs and response.outputs[0].end_session:
-            session_ended = True
+        # 7. Extract data for each individual output block
+        if response.outputs:
+            for output in response.outputs:
+                msg_data = _process_single_output(output, current_session_state)
+
+                agent_messages.append(
+                    {
+                        "text": msg_data["text"],
+                        "session_variables": msg_data["session_variables"],
+                        "tool_calls": msg_data["tool_calls"],
+                    }
+                )
+
+                if msg_data["end_session"]:
+                    session_ended = True
 
         # 8. Build the requested tool output format
         tool_response: Dict[str, Any] = {
-            "text": response.outputs[0].text if response.outputs else "",
-            "tool_calls": tool_calls,
-            "session_variables": session_vars,
             "session_id": session_id,
+            "agent_messages": agent_messages,
+            # "raw_response": str(response),
         }
 
         if session_ended:
@@ -189,20 +238,3 @@ def send_message_to_cx_agent(
         return {"status": "error", "error": str(e)}
 
     return tool_response
-
-
-if __name__ == "__main__":
-    # Example usage
-    session_id = str(uuid.uuid4())
-
-    response = send_message_to_cx_agent(
-        project_id="ces-ccai-demo",
-        region_id="us",
-        app_id="cb160644-1d3b-49c5-bba5-079e4fda9671",
-        session_id=session_id,
-        text="hello, set the variable exit_reason to resolved",
-    )
-
-    import json
-
-    print(json.dumps(response, indent=2))
