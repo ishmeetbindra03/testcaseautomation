@@ -1,0 +1,3 @@
+google-cloud-ces
+google-cloud-aiplatform
+google-adk==2.2.0
