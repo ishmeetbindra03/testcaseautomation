@@ -223,3 +223,7 @@ tc/
 data/
 .DS_STORE
 uv.lock
+
+.adk
+
+*.code-workspace

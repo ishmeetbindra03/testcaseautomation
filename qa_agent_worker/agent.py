@@ -15,17 +15,97 @@
 import os
 
 from google.adk.agents.llm_agent import Agent
-
+from google.adk.tools import ToolContext
 from .cxas_tool import generate_session_id, send_message_to_cx_agent
-from .prompts import QA_AGENT_INSTRUCTIONS
+from .prompts import QA_AGENT_INSTRUCTIONS_2
+from pydantic import BaseModel
+from .test_case_tools import execute_test_case
+
+from datetime import datetime, timezone
+from typing import Optional, Any, Dict
+
+from enum import Enum
 
 # set region
 os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
+
+
+from .models import TestCase, Turn, TestCaseResult
+
+def get_var(key, context: ToolContext) -> str:
+    return context.state[key] if key in context.state else f"{key} does not exist."
+
+def set_var(key, value, context: ToolContext) -> str:
+    context.state[key] = value
+    return {
+        "name": key,
+        "value": value,
+        "status": "success"
+    }
+
+
+def initialize_test_case(
+        project_id: str, 
+        region_id: str, 
+        app_id: str,
+        tcid: str,
+        initial_input_variables: dict[str, Any],
+        test_procedure: list[dict[str, Any]], 
+        transcript_expectations: list[str],
+        variable_expectations: dict[str, str],
+        context: ToolContext,
+        overall_result: Optional[TestCaseResult] = TestCaseResult.PENDING
+        ) -> str:
+    """Initializes a TestCase, serializes it, and saves it to the agent's context state.
+
+    This tool is called by the agent at the start of a test run to establish the test
+    configuration, expectations, and sequence of turns to verify.
+
+    Args:
+        project_id: The Google Cloud Project ID containing the agent under test.
+        region_id: The Dialogflow CX region/location ID (e.g., "us-central1", "global").
+        app_id: The ID of the Dialogflow CX agent (the application under test).
+        tcid: A unique identifier for this specific test case (e.g., "tc_001").
+        initial_input_variables: Key-value pairs representing variables to initialize the session with.
+        test_procedure: A list of turns representing the expected conversational flow.
+            Each turn must be a dictionary representing a Turn model containing:
+                - "user_message" (dict, optional): Expectations for the user/caller turn.
+                    - "text" (dict, optional): Expected text check, formatted as:
+                        {"expectation_type": "any" | "exact" | "semantic" | "optional", "text": "value"}
+                    - "vars" (dict, optional): Expected variables, formatted as:
+                        {"expectation_type": "any" | "exact" | "semantic" | "optional", "vars": [...]}
+                - "agent_message" (dict, optional): Expectations for the agent response turn.
+                    - "text" (dict, optional): Expected text check, formatted as:
+                        {"expectation_type": "any" | "exact" | "semantic" | "optional", "text": "value"}
+                    - "vars" (dict, optional): Expected variables, formatted as:
+                        {"expectation_type": "any" | "exact" | "semantic" | "optional", "vars": [...]}
+        transcript_expectations: A list of expectations regarding the final conversation transcript.
+        variable_expectations: A dictionary mapping variable names to their expected final string values.
+        context: The ADK ToolContext injected by the agent runtime. Do not pass this manually.
+        overall_result: The initial result status of the test case. Defaults to TestCaseResult.PENDING.
+
+    Returns:
+        A success message indicating the test case has been successfully initialized.
+    """
+    context.state[tcid] = TestCase(
+        project_id=project_id,
+        region_id=region_id,
+        app_id=app_id,
+        start_time=datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S %Z"),
+        tcid=tcid,
+        initial_input_variables=initial_input_variables,
+        test_procedure=test_procedure,
+        transcript_expectations=transcript_expectations,
+        variable_expectations=variable_expectations,
+        overall_result=overall_result
+    ).model_dump(mode='json')
+    
+    return f"Successfully initialized test case: {tcid}"
 
 root_agent = Agent(
     model="gemini-3.5-flash",
     name="qa_agent_worker",
     description="An QA agent that executes test cases",
-    instruction=QA_AGENT_INSTRUCTIONS,
-    tools=[generate_session_id, send_message_to_cx_agent],
+    instruction=QA_AGENT_INSTRUCTIONS_2,
+    tools=[initialize_test_case,generate_session_id, send_message_to_cx_agent, execute_test_case, get_var, set_var],
 )

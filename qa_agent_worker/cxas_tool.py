@@ -13,9 +13,28 @@
 # limitations under the License.
 
 import uuid
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from google.cloud import ces_v1
+from google.adk.tools import ToolContext
+
+
+
+def get_datetime_utc() -> str:
+    # Get the current timezone-aware datetime object
+    now = datetime.now().astimezone()
+
+    # Format the datetime object into the desired string format
+    # The '%z' directive gives the UTC offset in the format +HHMM or -HHMM.
+    # We then manually insert the colon ':' to match the requested format.
+    formatted_string = (
+        now.strftime("%Y/%m/%d %H:%M:%S")
+        + now.strftime("%z")[:3]
+        + ":"
+        + now.strftime("%z")[3:]
+    )
+    return formatted_string
 
 
 def _unwrap(val) -> Any:
@@ -159,6 +178,7 @@ def send_message_to_cx_agent(
     app_id: str,
     text: str,
     session_id: str,
+    context: ToolContext,
     session_variables: Optional[Dict[str, str]] = {},
 ) -> Dict[str, Any]:
     """Sends a message to CX Agent and returns text, tool calls, and session variables.
@@ -177,6 +197,7 @@ def send_message_to_cx_agent(
             agent_messages (list[dict]): A list of messages (text, variables, tool_calls) output by the agent
             raw_response (str): The raw string response
     """
+
     # 1. Initialize the Session client
     client = ces_v1.SessionServiceClient()
 
@@ -224,6 +245,7 @@ def send_message_to_cx_agent(
 
         # 8. Build the requested tool output format
         tool_response: Dict[str, Any] = {
+            "timestamp": get_datetime_utc(),
             "session_id": session_id,
             "agent_messages": agent_messages,
             # "raw_response": str(response),
