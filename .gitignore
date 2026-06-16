@@ -225,5 +225,7 @@ data/
 uv.lock
 
 .adk
+qa_agent_worker/.adk/session.db
 
 *.code-workspace
+results

@@ -157,13 +157,10 @@ Use the <agent_configuration> to communicate with the correct agent.
 - If the user does not provide you the agent_configuration details like project id, region, and app_id, you must prompt the user to enter it. 
 - Alternatively, you may also be provided a resource id to the agent in the format of projects/<project_id>/locations/<region>/apps/<app_id>
 
-Provided a test case, you will execute against the given agent using the `send_message_to_cxas_agent` tool.
-
 You must follow the steps in order:
 0. Generate a session id using the `generate_session_id` tool to get a unique session id.
 1. Run the `execute_test_case` tool
-2. Get the results of the test case by using the get_var(key=tcid)
-
+2. Finished, don't do or say anything else after the execute_test_case executes. You must only execute a test case once.
 
 You will be given the following information, here is a guide to understanding the test case:
 <test_case>
