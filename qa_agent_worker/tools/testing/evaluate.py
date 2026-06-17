@@ -613,7 +613,7 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
         turn_exp_actual = "The agent followed the test procedure expectations perfectly."
 
     expectations.append({
-        "expectation": "The [Agent] followed the test procedure expectations above.",
+        "expectation": "The [Agent] followed the test procedure expectations.",
         "actual": turn_exp_actual,
         "result": turn_exp_status
     })

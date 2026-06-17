@@ -43,7 +43,7 @@ def clean_json_response(text: str) -> str:
         text = text[:-3]
     return text.strip()
 
-async def process_csv(input_csv: str, results_dir: str, project_id: str, region: str, app_id: str, modality: str = "text"):
+async def process_csv(input_csv: str, results_dir: str, project_id: str, region: str, app_id: str, modality: str = "text", max_parallel_workers: int = 1):
     # 1. Create a timestamped folder within results_dir
     timestamp = datetime.now().strftime("%Y%m%d_%H_%M_%S")
     output_folder = os.path.join(results_dir, timestamp)
@@ -58,15 +58,10 @@ async def process_csv(input_csv: str, results_dir: str, project_id: str, region:
 
     print(f"Reading data from: {input_csv}")
 
-    all_results = []
+    semaphore = asyncio.Semaphore(max_parallel_workers)
 
-    # Open and read the CSV
-    with open(input_csv, 'r', encoding='utf-8') as csvfile:
-        # DictReader converts each row into a dictionary automatically mapping headers to values
-        reader = csv.DictReader(csvfile) 
-
-        for index, row in enumerate(reader):
-            row_num = index + 1
+    async def process_row(row_num, row):
+        async with semaphore:
             print(f"Processing row {row_num}...")
 
             # 2. Create a brand new session for this specific row
@@ -132,7 +127,6 @@ async def process_csv(input_csv: str, results_dir: str, project_id: str, region:
                 "input_data": row,
                 "agent_output": parsed_json
             }
-            all_results.append(row_result)
 
             # 6. Dump the result into its individual .json file within the timestamped folder
             out_filename = f"{csv_basename}_{row_num}.json"
@@ -149,6 +143,21 @@ async def process_csv(input_csv: str, results_dir: str, project_id: str, region:
             individual_html = generate_individual_html(row_result)
             with open(html_filepath, 'w', encoding='utf-8') as htmlfile:
                 htmlfile.write(individual_html)
+
+            return row_result
+
+    tasks = []
+
+    # Open and read the CSV
+    with open(input_csv, 'r', encoding='utf-8') as csvfile:
+        # DictReader converts each row into a dictionary automatically mapping headers to values
+        reader = csv.DictReader(csvfile) 
+
+        for index, row in enumerate(reader):
+            row_num = index + 1
+            tasks.append(process_row(row_num, row))
+
+    all_results = await asyncio.gather(*tasks)
 
     # 8. Generate index/dashboard HTML after all cases have finished
     index_filepath = os.path.join(output_folder, "index.html")
@@ -443,11 +452,26 @@ def main():
         choices=["text", "voice"],
         help="The modality to use (must be 'text' or 'voice')"
     )
+
+    parser.add_argument(
+        "--MAX_PARALLEL_WORKERS",
+        type=int,
+        default=1,
+        help="Maximum number of parallel workers to run test cases at any time"
+    )
     
     args = parser.parse_args()
 
     # Run the async loop
-    asyncio.run(process_csv(args.input_csv, args.results_dir, args.project_id, args.region, args.app_id, args.modality))
+    asyncio.run(process_csv(
+        args.input_csv, 
+        args.results_dir, 
+        args.project_id, 
+        args.region, 
+        args.app_id, 
+        args.modality,
+        args.MAX_PARALLEL_WORKERS
+    ))
 
 # -----------------------------------------------------------------------------
 # Premium HTML Templates

@@ -96,57 +96,6 @@ You will be given the following information, here is a guide to understanding th
         </expectations_variables>
     </evaluation>
 </test_case>
-
-You must always output a valid JSON using the results_template:
-<results_template>
-{
-    "project_id": <project_id>,
-    "region": <region>,
-    "app_id": <app_id>,
-    "session_id": <the session id used to invoke cxas agent>,
-    "timestamp": <the current time in YYYY/MM/DD HH:mm:ss±HH:MM format>,
-    "tcid": <the test case id>,
-    "initial_input_variables": {
-        "key":"value"
-    },
-    "transcript": [
-        {   
-            "timestamp": <message timestamp in YYYY/MM/DD HH:mm:ss±HH:MM format>,
-            "speaker": <speaker, either 'Agent' or 'Caller'>,
-            "observed_utterance": <the verbatim utterance from the agent>
-            "expected_utterance": <the verbatim expected utterance from the test procedure>,
-            "transcript_expectation": "<expect any | exact | similar> #caller must always be exact, agent must match the test procedure agent_expect_any, agent_expect_exact, agent expect_similar",
-            "transcript_expectation_status": <passed | failed>,
-            "variables": <list of variables set in this turn>, 
-        }
-    ],
-    "expectations": [
-        {
-            "expectation": "The [Agent] followed the test procedure expectations above.",
-            "actual": "<what you observed, if any of the transcript expectations for the [Agent] only above failed, this MUST be set to failed>",
-            "result": "<passed | failed> ",
-        },
-        {
-            "expectation": "The [Agent] set the correct variables exactly as expected.",
-            "action": "<what you observed, if any of the variables were not set exactly, this must be failed",
-            "session_variables: [
-                "variable_name": {
-                    "observed_value": "<the verbatim observed value>",
-                    "expected_value": "<the verbatim expected value>",
-                    "result": "<passed | failed>"
-                }
-            ]
-        },
-        {
-            "expectation": "other expectations including transcript and variable expectations",
-            "actual": "<the actual observations>",
-            "result": "<passed | failed>"
-        }
-    ],
-    "reasoning": "detailed analysis and explanation of the expectations and whether the test case passed or not. If any of the expectations are failed above, this must be set to failed.",
-    "overall_result": "<passed | failed>"
-}
-</results_template>
 """
 
 EVAL_SIMILARITY_PROMPT_TEMPLATE = """
