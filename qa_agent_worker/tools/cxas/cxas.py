@@ -12,14 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from google.cloud import ces_v1
 from google.adk.tools import ToolContext
-
-
 
 def get_datetime_utc() -> str:
     # Get the current timezone-aware datetime object
@@ -35,7 +31,6 @@ def get_datetime_utc() -> str:
         + now.strftime("%z")[3:]
     )
     return formatted_string
-
 
 def _unwrap(val) -> Any:
     """Safely extracts native Python types from Google's proto-plus and Protobuf objects."""
@@ -71,7 +66,6 @@ def _unwrap(val) -> Any:
 
     # 5. Ultimate fallback as string
     return str(pb_val)
-
 
 def _process_single_output(
     output, current_session_state: Dict[str, Any]
@@ -162,16 +156,6 @@ def _process_single_output(
         "end_session": getattr(pb_output, "end_session", False),
     }
 
-
-def generate_session_id() -> str:
-    """Use this tool to generate a unique session_id.
-
-    Returns
-        str: the unique ssesion id to use
-    """
-    return str(uuid.uuid4())
-
-
 def send_message_to_cx_agent(
     project_id: str,
     region_id: str,
@@ -180,6 +164,7 @@ def send_message_to_cx_agent(
     session_id: str,
     context: ToolContext,
     session_variables: Optional[Dict[str, str]] = {},
+    modality: str = "text",
 ) -> Dict[str, Any]:
     """Sends a message to CX Agent and returns text, tool calls, and session variables.
 
@@ -190,6 +175,7 @@ def send_message_to_cx_agent(
         session_id (str): The session id to use.
         text (str): The text to send to the agent
         session_variables (Dict[str, str]): key-value pair of session variables to send
+        modality (str): The interaction modality, 'text' or 'audio' (voice)
 
     Returns:
         dict:
@@ -198,34 +184,25 @@ def send_message_to_cx_agent(
             raw_response (str): The raw string response
     """
 
-    # 1. Initialize the Session client
-    client = ces_v1.SessionServiceClient()
+    from cxas_scrapi.core.sessions import Sessions
 
-    # 2. Format the fully qualified session path
-    session_path = f"projects/{project_id}/locations/{region_id}/apps/{app_id}/sessions/{session_id}"
+    app_name = f"projects/{project_id}/locations/{region_id}/apps/{app_id}"
+    sessions_client = Sessions(app_name=app_name)
 
-    # 3. Create the session configuration
-    config = ces_v1.SessionConfig(session=session_path)
-    inputs = []
-
-    # 4. Create the user input
-    user_input = ces_v1.SessionInput(text=text)
-    inputs.append(user_input)
-
-    if session_variables:
-        variables_input = ces_v1.SessionInput(variables=session_variables)
-        inputs.append(variables_input)
-
-    # 5. Build the request payload
-    request = ces_v1.RunSessionRequest(config=config, inputs=inputs)
-
-    # 6. Send the request to CX Agent Studio
+    # Send the request using cxas-scrapi Sessions client
     try:
-        response = client.run_session(request=request)
+        response = sessions_client.run(
+            session_id=session_id,
+            text=text,
+            variables=session_variables,
+            modality=modality,
+        )
 
         agent_messages = []
         current_session_state = {}  # Tracks cumulative variables across multiple outputs
         session_ended = False
+
+        print(response)
 
         # 7. Extract data for each individual output block
         if response.outputs:

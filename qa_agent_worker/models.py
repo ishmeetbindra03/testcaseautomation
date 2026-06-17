@@ -1,6 +1,6 @@
-from typing import Optional, Any, Dict, List, Literal
+from typing import Optional, Any, Dict, List
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class TestCaseResult(Enum):
     """Defines the TestCaseResult enum"""
@@ -112,3 +112,18 @@ class TestCase(BaseModel):
 
     expected_test_procedure: ExpectedTestProcedure
     actual_test_procedure: Optional[ActualTestProcedure] = None
+
+class SimilarityEvaluation(BaseModel):
+    """Pydantic model for structured Gemini similarity evaluations."""
+    score: int = Field(description="Similarity score between 1 (Not similar) and 5 (Very strongly similar)")
+    reasoning: str = Field(description="A brief rationale for the assigned score")
+
+class TranscriptExpectationEvaluation(BaseModel):
+    """Evaluation result for a single transcript expectation."""
+    expectation: str = Field(description="The high-level transcript expectation that was checked")
+    passed: bool = Field(description="Whether the transcript met the expectation")
+    reasoning: str = Field(description="A brief rationale for the decision")
+
+class TranscriptEvaluationResponse(BaseModel):
+    """Pydantic model for bulk transcript expectation checking."""
+    evaluations: List[TranscriptExpectationEvaluation]

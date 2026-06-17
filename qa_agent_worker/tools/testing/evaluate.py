@@ -6,11 +6,9 @@ from typing import Any, Dict, Optional, List
 from google.adk.tools import ToolContext
 from google import genai
 from google.genai import types
-from pydantic import BaseModel, Field
 
-from .models import (
+from ...models import (
     TestCase,
-    Turn,
     ActualTurn,
     ActualMessage,
     MessageEvaluation,
@@ -18,32 +16,17 @@ from .models import (
     ExpectationType,
     VariableExpectation,
     TextExpectation,
-    ConversationExpectations,
-    ExpectedTestProcedure,
     ConversationEvaluations,
     ActualTestProcedure,
+    SimilarityEvaluation,
+    TranscriptEvaluationResponse
 )
-from .cxas_tool import send_message_to_cx_agent
+from ..cxas import send_message_to_cx_agent
 
 GEMINI_MODEL = os.getenv("EVALUATE_GEMINI_MODEL", "gemini-3.1-flash-lite")
 
-class SimilarityEvaluation(BaseModel):
-    """Pydantic model for structured Gemini similarity evaluations."""
-    score: int = Field(description="Similarity score between 1 (Not similar) and 5 (Very strongly similar)")
-    reasoning: str = Field(description="A brief rationale for the assigned score")
 
-class TranscriptExpectationEvaluation(BaseModel):
-    """Evaluation result for a single transcript expectation."""
-    expectation: str = Field(description="The high-level transcript expectation that was checked")
-    passed: bool = Field(description="Whether the transcript met the expectation")
-    reasoning: str = Field(description="A brief rationale for the decision")
-
-class TranscriptEvaluationResponse(BaseModel):
-    """Pydantic model for bulk transcript expectation checking."""
-    evaluations: List[TranscriptExpectationEvaluation]
-
-
-def evaluate_text_expectation(expected: Optional[TextExpectation], actual_text: str, client: genai.Client) -> Dict[str, Any]:
+def _evaluate_text_expectation(expected: Optional[TextExpectation], actual_text: str, client: genai.Client) -> Dict[str, Any]:
     """Evaluates actual text against a TextExpectation, returning a detailed result dict."""
     if expected is None:
         return {"passed": True}
@@ -80,7 +63,7 @@ def evaluate_text_expectation(expected: Optional[TextExpectation], actual_text: 
             print("        -> [OPTIMIZATION] Exact match found for semantic expectation. Short-circuited Gemini call.")
             return {"passed": True, "score": 5, "reasoning": "Optimized: Exact match found. Short-circuited Gemini call."}
 
-        print(f"        -> Running semantic similarity check via Gemini...")
+        print("        -> Running semantic similarity check via Gemini...")
         prompt = f"""
         Compare the following two strings for semantic similarity.
         
@@ -117,7 +100,7 @@ def evaluate_text_expectation(expected: Optional[TextExpectation], actual_text: 
     return {"passed": True}
 
 
-def evaluate_variable_expectation(expected: VariableExpectation, actual_vars: Dict[str, Any], client: genai.Client) -> Dict[str, Any]:
+def _evaluate_variable_expectation(expected: VariableExpectation, actual_vars: Dict[str, Any], client: genai.Client) -> Dict[str, Any]:
     """Evaluates actual variables against a VariableExpectation, returning a detailed result dict."""
     name = expected.name
     expected_val = expected.value
@@ -158,7 +141,7 @@ def evaluate_variable_expectation(expected: VariableExpectation, actual_vars: Di
             print(f"        -> [OPTIMIZATION] Exact match found for semantic variable '{name}'. Short-circuited Gemini call.")
             return {"passed": True, "actual": actual_val, "score": 5, "reasoning": "Optimized: Exact match found. Short-circuited Gemini call."}
 
-        print(f"        -> Running semantic variable similarity check via Gemini...")
+        print("        -> Running semantic variable similarity check via Gemini...")
         prompt = f"""
         Compare the following two variable values for semantic similarity.
         
@@ -195,7 +178,7 @@ def evaluate_variable_expectation(expected: VariableExpectation, actual_vars: Di
     return {"passed": True, "actual": actual_val}
 
 
-def evaluate_transcript_expectations(expectations: List[str], actual_transcript: List[str], client: genai.Client) -> Dict[str, bool]:
+def _evaluate_transcript_expectations(expectations: List[str], actual_transcript: List[str], client: genai.Client) -> Dict[str, bool]:
     """Uses Gemini to evaluate high-level transcript expectations against the actual conversation transcript."""
     if not expectations:
         return {}
@@ -257,7 +240,7 @@ def evaluate_transcript_expectations(expectations: List[str], actual_transcript:
         return results
 
 
-def evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
+def _evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
     """Programmatically evaluates execution actuals against expected expectations, saving turn-level and overall evaluations."""
     print("\n========================================================")
     print(f"[EVALUATE] Starting Programmatic Evaluation for Test Case: {test_case.tcid}")
@@ -297,7 +280,7 @@ def evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
             
             # Text check
             if expected_turn.user_message.text:
-                res = evaluate_text_expectation(expected_turn.user_message.text, actual_user.text, client)
+                res = _evaluate_text_expectation(expected_turn.user_message.text, actual_user.text, client)
                 user_eval.text_passed = res["passed"]
                 user_eval.text_score = res.get("score")
                 user_eval.text_reasoning = res.get("reasoning")
@@ -309,7 +292,7 @@ def evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
             if expected_turn.user_message.vars:
                 user_eval.variables_passed = True
                 for var_exp in expected_turn.user_message.vars.vars:
-                    v_res = evaluate_variable_expectation(var_exp, actual_user.vars, client)
+                    v_res = _evaluate_variable_expectation(var_exp, actual_user.vars, client)
                     user_eval.variable_details[var_exp.name] = v_res
                     if not v_res["passed"]:
                         user_eval.variables_passed = False
@@ -326,7 +309,7 @@ def evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
             
             # Text check
             if expected_turn.agent_message.text:
-                res = evaluate_text_expectation(expected_turn.agent_message.text, actual_agent.text, client)
+                res = _evaluate_text_expectation(expected_turn.agent_message.text, actual_agent.text, client)
                 agent_eval.text_passed = res["passed"]
                 agent_eval.text_score = res.get("score")
                 agent_eval.text_reasoning = res.get("reasoning")
@@ -338,7 +321,7 @@ def evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
             if expected_turn.agent_message.vars:
                 agent_eval.variables_passed = True
                 for var_exp in expected_turn.agent_message.vars.vars:
-                    v_res = evaluate_variable_expectation(var_exp, actual_agent.vars, client)
+                    v_res = _evaluate_variable_expectation(var_exp, actual_agent.vars, client)
                     agent_eval.variable_details[var_exp.name] = v_res
                     if not v_res["passed"]:
                         agent_eval.variables_passed = False
@@ -366,7 +349,7 @@ def evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
             if at.agent_message and at.agent_message.text:
                 actual_transcript.append(f"Agent: {at.agent_message.text}")
 
-        transcript_evals = evaluate_transcript_expectations(
+        transcript_evals = _evaluate_transcript_expectations(
             conv_expectations.transcript_expectations,
             actual_transcript,
             client
@@ -409,131 +392,7 @@ def evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
     print("========================================================\n")
     return test_case
 
-
-def execute_test_case(
-    tcid: str,
-    context: ToolContext,
-) -> str:
-    """Reads a TestCase from state, executes it against CX Agent, programmatically checks all expectations, and updates overall_result.
-
-    This tool sends the user messages specified in each turn of the test_procedure to the
-    CX Agent agent under test, captures the agent's actual responses and cumulative 
-    session variables, and programmatically evaluates them using exact matching and LLM-as-judge semantic similarity.
-
-    Args:
-        tcid: The unique test case identifier (e.g., "tc_001") whose TestCase is stored in context.state.
-        context: The ADK ToolContext (automatically injected).
-
-    Returns:
-        dict: The result of the test case    
-    """
-    if tcid not in context.state:
-        return f"Test case id {tcid} not found in state."
-
-    print("\n========================================================")
-    print(f"[EXECUTE] Initializing Test Case Run: {tcid}")
-    print("========================================================")
-
-    try:
-        test_case = TestCase.model_validate(context.state[tcid])
-    except Exception as e:
-        print(f"[ERROR] Failed to validate test case {tcid}: {str(e)}")
-        return f"Failed to validate test case {tcid}: {str(e)}"
-
-    session_id = str(uuid.uuid4())
-    test_case.session_id = session_id
-    print(f"[EXECUTE] Started CX Agent conversation session: {session_id}")
-
-    actual_turns: List[ActualTurn] = []
-    current_vars: Dict[str, Any] = dict(test_case.initial_input_variables or {})
-
-    # Execute the test case sequential conversation
-    for idx, turn in enumerate(test_case.expected_test_procedure.turn_expectations):
-        turn_id = turn.turn_id if turn.turn_id is not None else (idx + 1)
-        print(f"\n--- [EXECUTE] Executing Turn {turn_id} ---")
-
-        user_text = ""
-        if turn.user_message and turn.user_message.text:
-            user_text = turn.user_message.text.text
-
-        send_vars = {}
-        if idx == 0 and test_case.initial_input_variables:
-            send_vars.update(test_case.initial_input_variables)
-
-        actual_user = ActualMessage(text=user_text, vars=dict(send_vars or current_vars))
-        if user_text:
-            print(f"  User:  {user_text}")
-
-        # Send utterance to CX Agent
-        print("  [EXECUTE] Sending request to CX Agent agent...")
-        response = send_message_to_cx_agent(
-            project_id=test_case.project_id,
-            region_id=test_case.region_id,
-            app_id=test_case.app_id,
-            text=user_text,
-            session_id=session_id,
-            context=context,
-            session_variables=send_vars if send_vars else None
-        )
-
-        if "status" in response and response["status"] == "error":
-            test_case.overall_result = TestCaseResult.ERROR
-            context.state[tcid] = test_case.model_dump(mode='json')
-            print(f"  [ERROR] CX interaction failed at turn {turn_id}: {response.get('error')}")
-            return f"Error executing test case turn {turn_id}: {response.get('error')}"
-
-        agent_messages = response.get("agent_messages", [])
-        agent_text = " ".join([m.get("text", "") for m in agent_messages if m.get("text")]).strip()
-
-        if agent_messages:
-            last_vars = agent_messages[-1].get("session_variables", {})
-            current_vars.update(last_vars)
-
-        actual_agent = ActualMessage(text=agent_text, vars=dict(current_vars))
-        if agent_text:
-            print(f"  Agent: {agent_text}")
-
-        print(f"  [EXECUTE] Active variables after Turn {turn_id}: {current_vars}")
-
-        turn_timestamp = datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S %Z")
-        actual_turn = ActualTurn(
-            turn_id=turn_id,
-            timestamp=turn_timestamp,
-            user_message=actual_user,
-            agent_message=actual_agent
-        )
-        actual_turns.append(actual_turn)
-
-    # Save gathered actual results
-    test_case.actual_test_procedure = ActualTestProcedure(
-        actual_turns=actual_turns,
-        actual_variables=current_vars
-    )
-
-    print(f"\n[EXECUTE] Conversation finished. Saved {len(actual_turns)} turns.")
-
-    # Programmatically evaluate actuals against expectations
-    try:
-        print("\n========================================================")
-        print("Starting Test Case Expectations Evaluations")
-        test_case = evaluate_test_case_expectations(test_case)
-    except Exception as e:
-        print(f"[ERROR] Evaluation failed: {str(e)}")
-        test_case.overall_result = TestCaseResult.ERROR
-        context.state[tcid] = test_case.model_dump(mode='json')
-        return f"Execution succeeded, but programmatic evaluation failed: {str(e)}"
-
-    # Save back to context state
-    print("Savings to context state")
-    context.state[tcid] = test_case.model_dump(mode='json')
-    context.state["final_output"] = get_test_case(tcid, context)
-
-    # Return structured test execution summary report
-    status_emoji = "✅ PASSED" if test_case.overall_result == TestCaseResult.PASSED else "❌ FAILED"
-    return f"Test Case {tcid} Execution Report:\nResult: {status_emoji}\nTurns Evaluated: {len(actual_turns)}"
-
-
-def get_test_case(tcid: str, context: ToolContext) -> Dict[str, Any]:
+def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
     """Loads the test case from the agent's context state and formats it according to the requested schema.
 
     Args:
@@ -543,11 +402,11 @@ def get_test_case(tcid: str, context: ToolContext) -> Dict[str, Any]:
     Returns:
         A dictionary containing the formatted test case details.
     """
-    if tcid not in context.state:
+    if tcid not in context.state["test_cases"]:
         return {"error": f"Test case ID {tcid} not found in state."}
 
     try:
-        test_case = TestCase.model_validate(context.state[tcid])
+        test_case = TestCase.model_validate(context.state["test_cases"][tcid])
     except Exception as e:
         return {"error": f"Failed to validate test case {tcid}: {str(e)}"}
 
@@ -783,35 +642,126 @@ def get_test_case(tcid: str, context: ToolContext) -> Dict[str, Any]:
     # 3. Assemble and return final dictionary (skipping reasoning)
     return final_output
 
+def execute_test_case(
+    tcid: str,
+    context: ToolContext,
+) -> str:
+    """Reads a TestCase from state, executes it against CX Agent, programmatically checks all expectations, and updates overall_result.
 
-def export_test_case(tcid: str, file_path: str, context: ToolContext) -> str:
-    """Exports the formatted test case details to a JSON file.
-
-    This tool retrieves the test case configuration and execution evaluations via
-    `get_test_case` and saves the complete structured output as a JSON file.
+    This tool sends the user messages specified in each turn of the test_procedure to the
+    CX Agent agent under test, captures the agent's actual responses and cumulative 
+    session variables, and programmatically evaluates them using exact matching and LLM-as-judge semantic similarity.
 
     Args:
-        tcid: The unique test case ID (e.g., "tc_001").
-        file_path: The absolute or relative file path to save the JSON file to.
-        context: The ADK ToolContext injected by the agent runtime. Do not pass this manually.
+        tcid: The unique test case identifier (e.g., "tc_001") whose TestCase is stored in context.state.
+        context: The ADK ToolContext (automatically injected).
 
     Returns:
-        A success message indicating the file path where the test case was saved, or an error message.
+        dict: The result of the test case    
     """
-    res = get_test_case(tcid=tcid, context=context)
-    if "error" in res:
-        return f"Failed to export test case: {res['error']}"
+    if tcid not in context.state["test_cases"]:
+        return f"Test case id {tcid} not found in state."
+
+    print("\n========================================================")
+    print(f"[EXECUTE] Initializing Test Case Run: {tcid}")
+    print("========================================================")
 
     try:
-        abs_path = os.path.abspath(file_path)
-        # Ensure target directory exists
-        dir_name = os.path.dirname(abs_path)
-        if dir_name:
-            os.makedirs(dir_name, exist_ok=True)
-            
-        with open(abs_path, "w", encoding="utf-8") as f:
-            json.dump(res, f, indent=2, ensure_ascii=False)
-            
-        return f"Successfully exported test case {tcid} to {file_path}"
+        test_case = TestCase.model_validate(context.state["test_cases"][tcid])
     except Exception as e:
-        return f"Failed to write test case to file {file_path}: {str(e)}"
+        print(f"[ERROR] Failed to validate test case {tcid}: {str(e)}")
+        return f"Failed to validate test case {tcid}: {str(e)}"
+
+    session_id = str(uuid.uuid4())
+    test_case.session_id = session_id
+    print(f"[EXECUTE] Started CX Agent conversation session: {session_id}")
+
+    actual_turns: List[ActualTurn] = []
+    current_vars: Dict[str, Any] = dict(test_case.initial_input_variables or {})
+
+    # Execute the test case sequential conversation
+    for idx, turn in enumerate(test_case.expected_test_procedure.turn_expectations):
+        turn_id = turn.turn_id if turn.turn_id is not None else (idx + 1)
+        print(f"\n--- [EXECUTE] Executing Turn {turn_id} ---")
+
+        user_text = ""
+        if turn.user_message and turn.user_message.text:
+            user_text = turn.user_message.text.text
+
+        send_vars = {}
+        if idx == 0 and test_case.initial_input_variables:
+            send_vars.update(test_case.initial_input_variables)
+
+        actual_user = ActualMessage(text=user_text, vars=dict(send_vars or current_vars))
+        if user_text:
+            print(f"  User:  {user_text}")
+
+        # Send utterance to CX Agent
+        print("  [EXECUTE] Sending request to CX Agent agent...")
+        response = send_message_to_cx_agent(
+            project_id=test_case.project_id,
+            region_id=test_case.region_id,
+            app_id=test_case.app_id,
+            text=user_text,
+            session_id=session_id,
+            context=context,
+            session_variables=send_vars if send_vars else None
+        )
+
+        if "status" in response and response["status"] == "error":
+            test_case.overall_result = TestCaseResult.ERROR
+            context.state["test_cases"][tcid] = test_case.model_dump(mode='json')
+            print(f"  [ERROR] CX interaction failed at turn {turn_id}: {response.get('error')}")
+            return f"Error executing test case turn {turn_id}: {response.get('error')}"
+
+        agent_messages = response.get("agent_messages", [])
+        agent_text = " ".join([m.get("text", "") for m in agent_messages if m.get("text")]).strip()
+
+        if agent_messages:
+            last_vars = agent_messages[-1].get("session_variables", {})
+            current_vars.update(last_vars)
+
+        actual_agent = ActualMessage(text=agent_text, vars=dict(current_vars))
+        if agent_text:
+            print(f"  Agent: {agent_text}")
+
+        print(f"  [EXECUTE] Active variables after Turn {turn_id}: {current_vars}")
+
+        turn_timestamp = datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S %Z")
+        actual_turn = ActualTurn(
+            turn_id=turn_id,
+            timestamp=turn_timestamp,
+            user_message=actual_user,
+            agent_message=actual_agent
+        )
+        actual_turns.append(actual_turn)
+
+    # Save gathered actual results
+    test_case.actual_test_procedure = ActualTestProcedure(
+        actual_turns=actual_turns,
+        actual_variables=current_vars
+    )
+
+    print(f"\n[EXECUTE] Conversation finished. Saved {len(actual_turns)} turns.")
+
+    # Programmatically evaluate actuals against expectations
+    try:
+        print("\n========================================================")
+        print("Starting Test Case Expectations Evaluations")
+        test_case = _evaluate_test_case_expectations(test_case)
+    except Exception as e:
+        print(f"[ERROR] Evaluation failed: {str(e)}")
+        test_case.overall_result = TestCaseResult.ERROR
+        context.state["test_cases"][tcid] = test_case.model_dump(mode='json')
+        return f"Execution succeeded, but programmatic evaluation failed: {str(e)}"
+
+    # Save back to context state
+    print("Savings to context state")
+    context.state["test_cases"][tcid] = test_case.model_dump(mode='json')
+    context.state["final_output"] = _get_final_output(tcid, context)
+
+    # Return structured test execution summary report
+    status_emoji = "✅ PASSED" if test_case.overall_result == TestCaseResult.PASSED else "❌ FAILED"
+    return f"Test Case {tcid} Execution Report:\nResult: {status_emoji}\nTurns Evaluated: {len(actual_turns)}"
+
+

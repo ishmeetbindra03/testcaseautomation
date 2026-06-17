@@ -12,15 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[project]
-name = "qa-agent"
-version = "0.1.0"
-description = "Agentic QA Agent Demo"
-readme = "README.md"
-requires-python = ">=3.14"
-dependencies = [
-    "google-adk>=2.2.0",
-    "google-cloud-aiplatform>=1.157.0",
-    "google-cloud-ces>=0.6.0",
-    "cxas-scrapi @ file:///Users/rossalas/repos/cxas-scrapi-main",
-]
+from .cxas_tools import send_message_to_cx_agent
