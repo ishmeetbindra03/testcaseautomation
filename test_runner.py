@@ -31,7 +31,7 @@ def clean_json_response(text: str) -> str:
 
 async def process_csv(input_csv: str, results_dir: str):
     # 1. Create a timestamped folder within results_dir
-    timestamp = datetime.now().strftime("%Y%m%d %H_%M_%S")
+    timestamp = datetime.now().strftime("%Y%m%d_%H_%M_%S")
     output_folder = os.path.join(results_dir, timestamp)
     os.makedirs(output_folder, exist_ok=True)
     print(f"Created output directory: {output_folder}")
