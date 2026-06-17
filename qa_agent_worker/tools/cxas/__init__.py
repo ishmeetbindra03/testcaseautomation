@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .cxas_tools import send_message_to_cx_agent
+from .cxas import send_message_to_cx_agent

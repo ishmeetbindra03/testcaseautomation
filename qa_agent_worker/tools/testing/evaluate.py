@@ -1,6 +1,8 @@
 import os
 import uuid
 import json
+import time
+import random
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
 from google.adk.tools import ToolContext
@@ -24,6 +26,33 @@ from ...models import (
 from ..cxas import send_message_to_cx_agent
 
 GEMINI_MODEL = os.getenv("EVALUATE_GEMINI_MODEL", "gemini-3.1-flash-lite")
+
+
+def _generate_content_with_retry(
+    client: genai.Client,
+    model: str,
+    contents: Any,
+    config: Any,
+    max_retries: int = 3
+) -> Any:
+    """Generates content using the Gemini client with exponential backoff retry."""
+    delay = 1.0  # Initial delay of 1 second
+    for attempt in range(max_retries + 1):
+        try:
+            return client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config
+            )
+        except Exception as e:
+            if attempt == max_retries:
+                print(f"           [ERROR] Gemini generate_content call failed after {max_retries} retries: {str(e)}")
+                raise e
+            
+            # Calculate sleep time with backoff and jitter
+            sleep_time = delay * (2 ** attempt) + random.uniform(0.1, 0.5)
+            print(f"           [WARNING] Gemini call failed: {str(e)}. Retrying in {sleep_time:.2f} seconds (Attempt {attempt + 1}/{max_retries})...")
+            time.sleep(sleep_time)
 
 
 def _evaluate_text_expectation(expected: Optional[TextExpectation], actual_text: str, client: genai.Client) -> Dict[str, Any]:
@@ -78,7 +107,8 @@ def _evaluate_text_expectation(expected: Optional[TextExpectation], actual_text:
         5 - Very strongly similar
         """
         try:
-            res = client.models.generate_content(
+            res = _generate_content_with_retry(
+                client=client,
                 model=GEMINI_MODEL,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -156,7 +186,8 @@ def _evaluate_variable_expectation(expected: VariableExpectation, actual_vars: D
         5 - Very strongly similar
         """
         try:
-            res = client.models.generate_content(
+            res = _generate_content_with_retry(
+                client=client,
                 model=GEMINI_MODEL,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -178,10 +209,10 @@ def _evaluate_variable_expectation(expected: VariableExpectation, actual_vars: D
     return {"passed": True, "actual": actual_val}
 
 
-def _evaluate_transcript_expectations(expectations: List[str], actual_transcript: List[str], client: genai.Client) -> Dict[str, bool]:
+def _evaluate_transcript_expectations(expectations: List[str], actual_transcript: List[str], client: genai.Client) -> tuple[Dict[str, bool], Dict[str, str]]:
     """Uses Gemini to evaluate high-level transcript expectations against the actual conversation transcript."""
     if not expectations:
-        return {}
+        return {}, {}
 
     print(f"\n  [GEMINI] Evaluating {len(expectations)} transcript expectations using {GEMINI_MODEL}...")
     transcript_text = "\n".join(actual_transcript)
@@ -202,7 +233,8 @@ def _evaluate_transcript_expectations(expectations: List[str], actual_transcript
     """
 
     try:
-        res = client.models.generate_content(
+        res = _generate_content_with_retry(
+            client=client,
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -214,11 +246,13 @@ def _evaluate_transcript_expectations(expectations: List[str], actual_transcript
         evaluations = data.get("evaluations", [])
         
         results = {}
+        reasonings = {}
         for item in evaluations:
             exp = item.get("expectation", "")
             passed = item.get("passed", False)
             reasoning = item.get("reasoning", "")
             results[exp] = passed
+            reasonings[exp] = reasoning
             print(f"    - Expectation: '{exp}' -> {'PASSED' if passed else 'FAILED'}")
             print(f"      Reasoning: {reasoning}")
         
@@ -226,18 +260,21 @@ def _evaluate_transcript_expectations(expectations: List[str], actual_transcript
         for exp in expectations:
             if exp not in results:
                 results[exp] = False
+                reasonings[exp] = "No evaluation returned from Gemini"
                 
-        return results
+        return results, reasonings
     except Exception as e:
         print(f"    [ERROR] Gemini transcript evaluation failed: {str(e)}. Falling back to exact substring match...")
         # Fallback to case-insensitive exact substring lookup in case of API failure
         results = {}
+        reasonings = {}
         transcript_lower = transcript_text.lower()
         for exp in expectations:
             passed = exp.lower() in transcript_lower
             results[exp] = passed
+            reasonings[exp] = f"Fallback exact match check. (Gemini call failed: {str(e)})"
             print(f"    - [FALLBACK] Expectation '{exp}': {'PASSED' if passed else 'FAILED'}")
-        return results
+        return results, reasonings
 
 
 def _evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
@@ -340,6 +377,7 @@ def _evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
     # 2. Verify high-level transcript_expectations using Gemini LLM-as-judge
     print("\n--- [EVALUATE] Evaluating High-Level Transcript Expectations (via Gemini) ---")
     transcript_evals = {}
+    transcript_reasonings = {}
     if conv_expectations.transcript_expectations:
         # Recreate transcript dynamically from actual turns
         actual_transcript = []
@@ -349,7 +387,7 @@ def _evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
             if at.agent_message and at.agent_message.text:
                 actual_transcript.append(f"Agent: {at.agent_message.text}")
 
-        transcript_evals = _evaluate_transcript_expectations(
+        transcript_evals, transcript_reasonings = _evaluate_transcript_expectations(
             conv_expectations.transcript_expectations,
             actual_transcript,
             client
@@ -381,7 +419,8 @@ def _evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
     # Store conversation-level evaluation results
     actual_procedure.actual_conversation_evaluations = ConversationEvaluations(
         transcript_evaluations=transcript_evals,
-        variable_evaluations=variable_evals
+        variable_evaluations=variable_evals,
+        transcript_reasonings=transcript_reasonings
     )
     test_case.actual_test_procedure = actual_procedure
 
@@ -442,8 +481,10 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
                 vars_dict = actual_turn.user_message.vars or {}
                 
             status = "passed"
+            reasoning = ""
             if actual_turn:
                 if actual_turn.user_message_evaluation:
+                    reasoning = actual_turn.user_message_evaluation.text_reasoning or ""
                     if actual_turn.user_message_evaluation.text_passed is False or actual_turn.user_message_evaluation.passed is False:
                         status = "failed"
             else:
@@ -458,7 +499,8 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
                 "expected_utterance": expected_text,
                 "transcript_expectation": user_exp_type,
                 "transcript_expectation_status": status,
-                "variables": vars_dict
+                "variables": vars_dict,
+                "reasoning": reasoning
             })
             
         # Add Agent Message (AgentMessage)
@@ -477,8 +519,10 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
                 vars_dict = actual_turn.agent_message.vars or {}
                 
             status = "passed"
+            reasoning = ""
             if actual_turn:
                 if actual_turn.agent_message_evaluation:
+                    reasoning = actual_turn.agent_message_evaluation.text_reasoning or ""
                     if actual_turn.agent_message_evaluation.text_passed is False or actual_turn.agent_message_evaluation.passed is False:
                         status = "failed"
             else:
@@ -493,7 +537,8 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
                 "expected_utterance": expected_text,
                 "transcript_expectation": agent_exp_type,
                 "transcript_expectation_status": status,
-                "variables": vars_dict
+                "variables": vars_dict,
+                "reasoning": reasoning
             })
             
     # Handle any actual turns that didn't match an expected turn
@@ -508,7 +553,8 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
                     "expected_utterance": "",
                     "transcript_expectation": "any",
                     "transcript_expectation_status": "passed",
-                    "variables": at.user_message.vars or {}
+                    "variables": at.user_message.vars or {},
+                    "reasoning": ""
                 })
             # Agent
             if at.agent_message:
@@ -519,7 +565,8 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
                     "expected_utterance": "",
                     "transcript_expectation": "any",
                     "transcript_expectation_status": "passed",
-                    "variables": at.agent_message.vars or {}
+                    "variables": at.agent_message.vars or {},
+                    "reasoning": ""
                 })
 
     # 2. Map expectations
@@ -605,9 +652,11 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
     # 2c. Transcript expectations (High level)
     transcript_exps = expected_procedure.conversation_expectations.transcript_expectations or []
     transcript_evals_map = actual_conv_evals.transcript_evaluations if actual_conv_evals else {}
+    transcript_reasonings_map = getattr(actual_conv_evals, "transcript_reasonings", {}) if actual_conv_evals else {}
     
     for exp in transcript_exps:
         passed = transcript_evals_map.get(exp, False) if transcript_evals_map else False
+        reasoning = transcript_reasonings_map.get(exp, "") if transcript_reasonings_map else ""
         
         if "professional" in exp.lower():
             actual_text = "The agent remained professional throughout the entire conversation." if passed else "The agent did not remain professional."
@@ -623,7 +672,8 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
         expectations.append({
             "expectation": exp,
             "actual": actual_text,
-            "result": status
+            "result": status,
+            "reasoning": reasoning
         })
 
     final_output = {

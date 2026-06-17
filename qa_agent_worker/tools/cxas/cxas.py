@@ -202,7 +202,7 @@ def send_message_to_cx_agent(
         current_session_state = {}  # Tracks cumulative variables across multiple outputs
         session_ended = False
 
-        print(response)
+        # print(response)
 
         # 7. Extract data for each individual output block
         if response.outputs:

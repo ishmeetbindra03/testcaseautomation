@@ -92,6 +92,7 @@ class ConversationEvaluations(BaseModel):
     """The result of evaluating conversation level expectations"""
     transcript_evaluations: Dict[str, bool] = {}
     variable_evaluations: Dict[str, bool] = {}
+    transcript_reasonings: Dict[str, str] = {}
 
 class ActualTestProcedure(BaseModel):
     """The recorded procedure of actual execution and the resulting evaluations"""
