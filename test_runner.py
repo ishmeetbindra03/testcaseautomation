@@ -24,7 +24,7 @@ import asyncio
 from datetime import datetime
 import warnings
 import html
-
+from uuid import uuid4
 # Import your agent from your agent.py file
 from qa_agent_worker.agent import root_agent
 from google.adk.runners import InMemoryRunner
@@ -43,7 +43,7 @@ def clean_json_response(text: str) -> str:
         text = text[:-3]
     return text.strip()
 
-async def process_csv(input_csv: str, results_dir: str):
+async def process_csv(input_csv: str, results_dir: str, project_id: str, region: str, app_id: str, modality: str = "text"):
     # 1. Create a timestamped folder within results_dir
     timestamp = datetime.now().strftime("%Y%m%d_%H_%M_%S")
     output_folder = os.path.join(results_dir, timestamp)
@@ -75,11 +75,31 @@ async def process_csv(input_csv: str, results_dir: str):
                 user_id="qa_user"
             )
 
+            add_vars = {}
+            add_vars.update({"conversationId": str(uuid4())})
+
             # 3. Input the row CSV data into text
             # Converting the row dictionary to a JSON string makes it easy for the agent to read
             row_text = json.dumps(row)
+
+            prompt = f"""
+            Project ID: {project_id}
+            Region: {region}
+            App ID: {app_id}
+
+            Execute the test in this modality:
+            Modality: {modality}
+            
+            <additional_variables>
+            Add these into the initial variables to the agent
+            {add_vars}
+            </additional_variables>
+
+            Please process the following data and return JSON:\n{row_text}
+            """
+
             message = UserContent(
-                parts=[Part(text=f"Please process the following data and return JSON:\n{row_text}")]
+                parts=[Part(text=prompt)]
             )
 
             agent_output_text = ""
@@ -155,6 +175,7 @@ def generate_individual_html(row_result: dict) -> str:
         region = "N/A"
         app_id = "N/A"
         session_id = "N/A"
+        modality = "N/A"
         timestamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S UTC")
         
         # Display parsing error
@@ -177,61 +198,83 @@ def generate_individual_html(row_result: dict) -> str:
         region = html.escape(str(agent_output.get("region", "N/A")))
         app_id = html.escape(str(agent_output.get("app_id", "N/A")))
         session_id = html.escape(str(agent_output.get("session_id", "N/A")))
+        modality = html.escape(str(agent_output.get("modality", "text")))
         timestamp = html.escape(str(agent_output.get("timestamp", "N/A")))
         
         # Build expectations HTML
         expectations = agent_output.get("expectations", [])
         expectations_html = ""
-        for idx, exp in enumerate(expectations):
-            exp_text = html.escape(str(exp.get("expectation", "")))
-            exp_result = html.escape(str(exp.get("result", "")))
-            exp_actual = html.escape(str(exp.get("actual", "")))
-            
-            if exp_result == "passed":
-                icon = "✔️"
-                border_color = "rgba(16, 185, 129, 0.25)"
-                bg_color = "rgba(16, 185, 129, 0.04)"
-                label_color = "var(--accent-success)"
-            else:
-                icon = "❌"
-                border_color = "rgba(244, 63, 94, 0.25)"
-                bg_color = "rgba(244, 63, 94, 0.04)"
-                label_color = "var(--accent-fail)"
-                
-            extra_info = ""
-            if "action" in exp:
-                action_escaped = html.escape(str(exp["action"]))
-                extra_info += f'<div style="font-style: italic; color: var(--text-secondary); margin-top: 4px;">{action_escaped}</div>'
-                
-            if "session_variables" in exp:
-                var_items = []
-                for var in exp["session_variables"]:
-                    v_name = html.escape(str(var.get("variable_name", "")))
-                    v_obs = html.escape(str(var.get("observed_value", "")))
-                    v_exp = html.escape(str(var.get("expected_value", "")))
-                    v_res = html.escape(str(var.get("result", "")))
+        if isinstance(expectations, list):
+            for idx, exp in enumerate(expectations):
+                if isinstance(exp, dict):
+                    exp_text = html.escape(str(exp.get("expectation", "")))
+                    exp_result = html.escape(str(exp.get("result", "")))
+                    exp_actual = html.escape(str(exp.get("actual", "")))
                     
-                    v_color = "var(--accent-success)" if v_res == "passed" else "var(--accent-fail)"
-                    v_icon = "✔️" if v_res == "passed" else "❌"
-                    var_items.append(
-                        f'<span class="variable-pill" style="border-color: {v_color}; color: {v_color};">'
-                        f'{v_icon} {v_name}: {v_obs} (expected {v_exp})'
-                        f'</span>'
-                    )
-                if var_items:
-                    extra_info += f'<div class="variables-pill-list" style="margin-top: 8px;">{" ".join(var_items)}</div>'
-                    
-            expectations_html += f"""
-            <div class="expectation-item" style="border-color: {border_color}; background-color: {bg_color};">
-                <span class="expectation-status-icon">{icon}</span>
-                <div class="expectation-content">
-                    <div class="expectation-label" style="color: {label_color}; font-weight: 600;">Expectation #{idx+1}</div>
-                    <div class="expectation-actual" style="color: var(--text-primary); font-weight: 500;">{exp_text}</div>
-                    {f'<div class="expectation-actual" style="margin-top: 4px;"><strong>Actual:</strong> {exp_actual}</div>' if exp_actual else ''}
-                    {extra_info}
-                </div>
-            </div>
-            """
+                    if exp_result == "passed":
+                        icon = "✔️"
+                        border_color = "rgba(16, 185, 129, 0.25)"
+                        bg_color = "rgba(16, 185, 129, 0.04)"
+                        label_color = "var(--accent-success)"
+                    else:
+                        icon = "❌"
+                        border_color = "rgba(244, 63, 94, 0.25)"
+                        bg_color = "rgba(244, 63, 94, 0.04)"
+                        label_color = "var(--accent-fail)"
+                        
+                    extra_info = ""
+                    if "action" in exp:
+                        action_escaped = html.escape(str(exp["action"]))
+                        extra_info += f'<div style="font-style: italic; color: var(--text-secondary); margin-top: 4px;">{action_escaped}</div>'
+                        
+                    if "session_variables" in exp and isinstance(exp["session_variables"], list):
+                        var_items = []
+                        for var in exp["session_variables"]:
+                            if isinstance(var, dict):
+                                v_name = html.escape(str(var.get("variable_name", "")))
+                                v_obs = html.escape(str(var.get("observed_value", "")))
+                                v_exp = html.escape(str(var.get("expected_value", "")))
+                                v_res = html.escape(str(var.get("result", "")))
+                                
+                                v_color = "var(--accent-success)" if v_res == "passed" else "var(--accent-fail)"
+                                v_icon = "✔️" if v_res == "passed" else "❌"
+                                var_items.append(
+                                    f'<span class="variable-pill" style="border-color: {v_color}; color: {v_color};">'
+                                    f'{v_icon} {v_name}: {v_obs} (expected {v_exp})'
+                                    f'</span>'
+                                )
+                            else:
+                                v_str = html.escape(str(var))
+                                var_items.append(
+                                    f'<span class="variable-pill" style="color: var(--text-secondary);">'
+                                    f'{v_str}'
+                                    f'</span>'
+                                )
+                        if var_items:
+                            extra_info += f'<div class="variables-pill-list" style="margin-top: 8px;">{" ".join(var_items)}</div>'
+                            
+                    expectations_html += f"""
+                    <div class="expectation-item" style="border-color: {border_color}; background-color: {bg_color};">
+                        <span class="expectation-status-icon">{icon}</span>
+                        <div class="expectation-content">
+                            <div class="expectation-label" style="color: {label_color}; font-weight: 600;">Expectation #{idx+1}</div>
+                            <div class="expectation-actual" style="color: var(--text-primary); font-weight: 500;">{exp_text}</div>
+                            {f'<div class="expectation-actual" style="margin-top: 4px;"><strong>Actual:</strong> {exp_actual}</div>' if exp_actual else ''}
+                            {extra_info}
+                        </div>
+                    </div>
+                    """
+                else:
+                    exp_text = html.escape(str(exp))
+                    expectations_html += f"""
+                    <div class="expectation-item" style="border-color: rgba(244, 63, 94, 0.15); background-color: rgba(244, 63, 94, 0.02);">
+                        <span class="expectation-status-icon">❓</span>
+                        <div class="expectation-content">
+                            <div class="expectation-label" style="color: var(--text-secondary); font-weight: 600;">Expectation #{idx+1}</div>
+                            <div class="expectation-actual" style="color: var(--text-primary); font-weight: 500;">{exp_text}</div>
+                        </div>
+                    </div>
+                    """
             
         if not expectations_html:
             expectations_html = '<div style="color: var(--text-secondary); font-style: italic;">No expectations listed in the JSON output.</div>'
@@ -239,53 +282,69 @@ def generate_individual_html(row_result: dict) -> str:
         # Build Transcript HTML
         transcript = agent_output.get("transcript", [])
         transcript_html = ""
-        for turn in transcript:
-            turn_timestamp = html.escape(str(turn.get("timestamp", "")))
-            speaker = html.escape(str(turn.get("speaker", "")))
-            observed = html.escape(str(turn.get("observed_utterance", "")))
-            expected = html.escape(str(turn.get("expected_utterance", "")))
-            exp_type = html.escape(str(turn.get("transcript_expectation", "")))
-            exp_status = html.escape(str(turn.get("transcript_expectation_status", "")))
-            variables = turn.get("variables", {})
-            
-            is_agent = (speaker.lower() == "agent")
-            bubble_class = "bubble-agent" if is_agent else "bubble-caller"
-            
-            expectation_block = ""
-            if is_agent and exp_status:
-                status_class = "expectation-passed" if exp_status == "passed" else "expectation-failed"
-                status_text = "PASSED" if exp_status == "passed" else "FAILED"
-                status_icon = "✔️" if exp_status == "passed" else "❌"
-                expectation_block = f"""
-                <div class="bubble-expectation {status_class}">
-                    <div style="font-weight: 600; display: flex; align-items: center; gap: 4px;">
-                        <span>{status_icon} Turn Expectation ({status_text})</span>
+        if isinstance(transcript, list):
+            for turn in transcript:
+                if not isinstance(turn, dict):
+                    turn_str = html.escape(str(turn))
+                    transcript_html += f"""
+                    <div class="chat-bubble bubble-caller">
+                        <div class="bubble-text">{turn_str}</div>
                     </div>
-                    <div style="margin-top: 2px;"><strong>Expected:</strong> {expected}</div>
-                    <div><strong>Match Mode:</strong> {exp_type}</div>
+                    """
+                    continue
+                turn_timestamp = html.escape(str(turn.get("timestamp", "")))
+                speaker = html.escape(str(turn.get("speaker", "")))
+                observed = html.escape(str(turn.get("observed_utterance", "")))
+                expected = html.escape(str(turn.get("expected_utterance", "")))
+                exp_type = html.escape(str(turn.get("transcript_expectation", "")))
+                exp_status = html.escape(str(turn.get("transcript_expectation_status", "")))
+                variables = turn.get("variables", {})
+                if not isinstance(variables, dict):
+                    variables = {}
+                
+                is_agent = (speaker.lower() == "agent")
+                bubble_class = "bubble-agent" if is_agent else "bubble-caller"
+                
+                expectation_block = ""
+                if is_agent and exp_status:
+                    status_class = "expectation-passed" if exp_status == "passed" else "expectation-failed"
+                    status_text = "PASSED" if exp_status == "passed" else "FAILED"
+                    status_icon = "✔️" if exp_status == "passed" else "❌"
+                    expectation_block = f"""
+                    <div class="bubble-expectation {status_class}">
+                        <div style="font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                            <span>{status_icon} Turn Expectation ({status_text})</span>
+                        </div>
+                        <div style="margin-top: 2px;"><strong>Expected:</strong> {expected}</div>
+                        <div><strong>Match Mode:</strong> {exp_type}</div>
+                    </div>
+                    """
+                    
+                vars_html = ""
+                if variables:
+                    pills = []
+                    for k, v in variables.items():
+                        k_esc = html.escape(str(k))
+                        v_esc = html.escape(str(v))
+                        pills.append(f'<span class="variable-pill">{k_esc}: {v_esc}</span>')
+                    vars_html = f"""
+                    <details style="margin-top: 8px; cursor: pointer;">
+                        <summary style="font-size: 11px; color: var(--text-secondary); font-weight: 500; outline: none; user-select: none;">Variables ({len(variables)})</summary>
+                        <div class="variables-pill-list" style="margin-top: 6px;">{" ".join(pills)}</div>
+                    </details>
+                    """
+                    
+                transcript_html += f"""
+                <div class="chat-bubble {bubble_class}">
+                    <div class="bubble-meta">
+                        <span class="bubble-speaker">{speaker}</span>
+                        <span>{turn_timestamp}</span>
+                    </div>
+                    <div class="bubble-text">{observed if observed else '<span style="font-style: italic; color: var(--text-secondary);">[Silent / Empty]</span>'}</div>
+                    {expectation_block}
+                    {vars_html}
                 </div>
                 """
-                
-            vars_html = ""
-            if variables:
-                pills = []
-                for k, v in variables.items():
-                    k_esc = html.escape(str(k))
-                    v_esc = html.escape(str(v))
-                    pills.append(f'<span class="variable-pill">{k_esc}: {v_esc}</span>')
-                vars_html = f'<div class="variables-pill-list">{" ".join(pills)}</div>'
-                
-            transcript_html += f"""
-            <div class="chat-bubble {bubble_class}">
-                <div class="bubble-meta">
-                    <span class="bubble-speaker">{speaker}</span>
-                    <span>{turn_timestamp}</span>
-                </div>
-                <div class="bubble-text">{observed if observed else '<span style="font-style: italic; color: var(--text-secondary);">[Silent / Empty]</span>'}</div>
-                {expectation_block}
-                {vars_html}
-            </div>
-            """
             
         if not transcript_html:
             transcript_html = '<div style="color: var(--text-secondary); font-style: italic;">No transcript conversational entries.</div>'
@@ -301,6 +360,7 @@ def generate_individual_html(row_result: dict) -> str:
     html_content = html_content.replace("{overall_result}", overall_result)
     html_content = html_content.replace("{tcid}", tcid)
     html_content = html_content.replace("{session_id}", session_id)
+    html_content = html_content.replace("{modality}", modality)
     html_content = html_content.replace("{project_id}", project_id)
     html_content = html_content.replace("{app_id}", app_id)
     html_content = html_content.replace("{timestamp}", timestamp)
@@ -372,11 +432,22 @@ def main():
     
     # Replaced output_json with results_dir
     parser.add_argument("--results_dir", default="results", help="Directory where timestamped output folders will be created")
+
+    parser.add_argument("--project_id", required=True)
+    parser.add_argument("--region", required=True)
+    parser.add_argument("--app_id", required=True)
+
+    parser.add_argument(
+        "--modality", 
+        required=True, 
+        choices=["text", "voice"],
+        help="The modality to use (must be 'text' or 'voice')"
+    )
     
     args = parser.parse_args()
 
     # Run the async loop
-    asyncio.run(process_csv(args.input_csv, args.results_dir))
+    asyncio.run(process_csv(args.input_csv, args.results_dir, args.project_id, args.region, args.app_id, args.modality))
 
 # -----------------------------------------------------------------------------
 # Premium HTML Templates
@@ -859,6 +930,10 @@ INDIVIDUAL_HTML_TEMPLATE = """<!DOCTYPE html>
                     <div class="kv-item">
                         <span class="kv-label">Session ID</span>
                         <span class="kv-value">{session_id}</span>
+                    </div>
+                    <div class="kv-item">
+                        <span class="kv-label">Modality</span>
+                        <span class="kv-value" style="text-transform: capitalize;">{modality}</span>
                     </div>
                     <div class="kv-item">
                         <span class="kv-label">Project ID</span>

@@ -122,6 +122,7 @@ class TestCase(BaseModel):
     session_id: Optional[str] = None
     start_time: str
     tcid: str
+    modality: str = "text"
     initial_input_variables: Optional[Dict[str, Any]] = {}
     overall_result: TestCaseResult = TestCaseResult.PENDING
 

@@ -51,7 +51,7 @@ def _execute_test_case_text(
         if idx == 0 and test_case.initial_input_variables:
             send_vars.update(test_case.initial_input_variables)
 
-        actual_user = ActualMessage(text=user_text, vars=dict(send_vars or current_vars))
+        actual_user = ActualMessage(text=user_text, vars=dict(send_vars))
         if user_text:
             print(f"  User:  {user_text}")
 
@@ -77,15 +77,31 @@ def _execute_test_case_text(
         agent_messages = response.get("agent_messages", [])
         agent_text = " ".join([m.get("text", "") for m in agent_messages if m.get("text")]).strip()
 
+        last_vars = {}
         if agent_messages:
-            last_vars = agent_messages[-1].get("session_variables", {})
-            current_vars.update(last_vars)
+            for agent_message in agent_messages:
+                last_vars.update(agent_message.get("session_variables", {}))
 
-        actual_agent = ActualMessage(text=agent_text, vars=dict(current_vars))
+        # Compute strictly updated or newly added variables on this turn
+        updated_vars_this_turn = {}
+        for k, v in last_vars.items():
+            if v is None and k in current_vars and current_vars[k] is not None:
+                continue
+            if k not in current_vars or current_vars[k] != v:
+                updated_vars_this_turn[k] = v
+
+        # Update current_vars keeping the non-null values
+        for k, v in last_vars.items():
+            if v is None and k in current_vars and current_vars[k] is not None:
+                continue
+            current_vars[k] = v
+
+        # actual_agent = ActualMessage(text=agent_text, vars=dict(current_vars))
+        actual_agent = ActualMessage(text=agent_text, vars=dict(updated_vars_this_turn))
         if agent_text:
             print(f"  Agent: {agent_text}")
 
-        print(f"  [EXECUTE TEXT] Active variables after Turn {turn_id}: {current_vars}")
+        print(f"  [EXECUTE TEXT] Updated variables after Turn {turn_id}: {updated_vars_this_turn}")
 
         turn_timestamp = datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S %Z")
         actual_turn = ActualTurn(

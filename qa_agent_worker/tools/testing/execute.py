@@ -108,6 +108,7 @@ def execute_test_case(
             app_id=app_id,
             start_time=datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S %Z"),
             tcid=tcid,
+            modality=channel,
             initial_input_variables=initial_input_variables,
             expected_test_procedure=expected_procedure,
             overall_result=TestCaseResult.PENDING,

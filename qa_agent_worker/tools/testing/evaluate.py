@@ -687,6 +687,7 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
         "region": test_case.region_id,
         "app_id": test_case.app_id,
         "session_id": test_case.session_id or "",
+        "modality": test_case.modality,
         "timestamp": test_case.start_time,
         "tcid": test_case.tcid,
         "initial_input_variables": test_case.initial_input_variables or {},
@@ -748,7 +749,7 @@ def execute_test_case(
         if idx == 0 and test_case.initial_input_variables:
             send_vars.update(test_case.initial_input_variables)
 
-        actual_user = ActualMessage(text=user_text, vars=dict(send_vars or current_vars))
+        actual_user = ActualMessage(text=user_text, vars=dict(send_vars))
         if user_text:
             print(f"  User:  {user_text}")
 
@@ -773,15 +774,25 @@ def execute_test_case(
         agent_messages = response.get("agent_messages", [])
         agent_text = " ".join([m.get("text", "") for m in agent_messages if m.get("text")]).strip()
 
-        if agent_messages:
-            last_vars = agent_messages[-1].get("session_variables", {})
-            current_vars.update(last_vars)
+        last_vars = {}
 
-        actual_agent = ActualMessage(text=agent_text, vars=dict(current_vars))
+        if agent_messages:
+            for agent_message in agent_messages:
+                last_vars.update(agent_message.get("session_variables", {}))
+
+        # Compute strictly updated or newly added variables on this turn
+        updated_vars_this_turn = {}
+        for k, v in last_vars.items():
+            if k not in current_vars or current_vars[k] != v:
+                updated_vars_this_turn[k] = v
+
+        current_vars.update(last_vars)
+
+        actual_agent = ActualMessage(text=agent_text, vars=dict(updated_vars_this_turn))
         if agent_text:
             print(f"  Agent: {agent_text}")
 
-        print(f"  [EXECUTE] Active variables after Turn {turn_id}: {current_vars}")
+        print(f"  [EXECUTE] Updated variables after Turn {turn_id}: {updated_vars_this_turn}")
 
         turn_timestamp = datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S %Z")
         actual_turn = ActualTurn(

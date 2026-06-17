@@ -48,6 +48,10 @@ You will be given the following information, here is a guide to understanding th
 
         If the test procedure does not start with a [Caller] utterance. You MUST ALWAYS add in [Caller] Hello and the initial variables as the first message.
 
+        You MUST include VERBATIM what the [Agent] or [Caller] must say when executing the test case. The utterance may span multiple lines without a [Agent] or [Caller] prefix.
+        - You must include ALL of lines of the [Agent] or [Caller] if you see that in the test case. It is very important that every part of the the utterance is included.
+        - If there are variables that can be substituted, e.g., if there is a variable Fname=Bob, and there's an utterance that says First Name or <first_name> or <FName>, make the substition when executing the test case.
+
         The [Agent] will have tags:
             - [Agent_Expect_Exact]: If the Agent says it exactly, pass this utterance criteria.
                 - If you see that there are placeholders in the agent utterance in the input test case, e.g., Are you calling about <product 1>?, make it Agent_Expect_Similar
