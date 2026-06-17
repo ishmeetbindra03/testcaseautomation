@@ -514,14 +514,17 @@ def execute_test_case(
 
     # Programmatically evaluate actuals against expectations
     try:
+        print("\n========================================================")
+        print("Starting Test Case Expectations Evaluations")
         test_case = evaluate_test_case_expectations(test_case)
     except Exception as e:
+        print(f"[ERROR] Evaluation failed: {str(e)}")
         test_case.overall_result = TestCaseResult.ERROR
         context.state[tcid] = test_case.model_dump(mode='json')
-        print(f"[ERROR] Evaluation crashed: {str(e)}")
         return f"Execution succeeded, but programmatic evaluation failed: {str(e)}"
 
     # Save back to context state
+    print("Savings to context state")
     context.state[tcid] = test_case.model_dump(mode='json')
     context.state["final_output"] = get_test_case(tcid, context)
 

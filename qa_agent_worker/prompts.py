@@ -187,12 +187,13 @@ You will be given the following information, here is a guide to understanding th
 
         The [Agent] will have tags:
             - [Agent_Expect_Exact]: If the Agent says it exactly, pass this utterance criteria.
+                - If you see that there are placeholders in the agent utterance in the input test case, e.g., Are you calling about <product 1>?, make it Agent_Expect_Similar
             - [Agent_Expect_Similar]: If the Agent says a similar meaning or mostly the same, pass this utterance criteria.
             - [Agent_Expect_Any]: The agent can say anything for one turn, as long as it says something. 
         
         If it says that the [Caller] need to:
-            - say no input/no-input, you must send exactly the following '<context>no user activity detected for 90 seconds.</context>' instead
-            - enter or press a DTMF digit, e.g., press 1, you must send it using this format '<context>user pressed <dtmf_digit> on keypad.</context>'
+            - say no input/no-input, you must send exactly 'no-input' exactly
+            - enter or press a DTMF digit, e.g., press 1, you must send it using this format 'pressed <dtmf_digit> on keypad' exactly
             - say no match, just must say 'no-match' exactly
 
         Once you reach the end of [Agent] and [Caller] tags and there are no more specified instructions. YOU MUST STOP AND NOT CONTINUE THE CONVERSATION. 
