@@ -37,6 +37,7 @@ from ...models import (
     SimilarityEvaluation,
     TranscriptEvaluationResponse
 )
+from ...prompts import EVAL_SIMILARITY_PROMPT_TEMPLATE
 from ..cxas import send_message_to_cx_agent
 
 GEMINI_MODEL = os.getenv("EVALUATE_GEMINI_MODEL", "gemini-3.1-flash-lite")
@@ -107,19 +108,10 @@ def _evaluate_text_expectation(expected: Optional[TextExpectation], actual_text:
             return {"passed": True, "score": 5, "reasoning": "Optimized: Exact match found. Short-circuited Gemini call."}
 
         print("        -> Running semantic similarity check via Gemini...")
-        prompt = f"""
-        Compare the following two strings for semantic similarity.
-        
-        Expected String: "{exp_text}"
-        Actual String: "{actual_text}"
-        
-        Rate the similarity on a scale from 1 to 5:
-        1 - Not similar
-        2 - Somewhat similar
-        3 - Moderately similar
-        4 - Strongly similar
-        5 - Very strongly similar
-        """
+        prompt = EVAL_SIMILARITY_PROMPT_TEMPLATE.format(
+            expected_text=exp_text,
+            actual_text=actual_text
+        )
         try:
             res = _generate_content_with_retry(
                 client=client,
