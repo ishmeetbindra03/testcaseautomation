@@ -77,7 +77,8 @@ def _process_single_output(
     text = getattr(pb_output, "text", "")
 
     tool_calls_map = {}
-
+    end_session = False
+    
     # Check for diagnostic info which contains the variables and tool calls
     if hasattr(pb_output, "diagnostic_info") and pb_output.diagnostic_info:
         diag = pb_output.diagnostic_info
@@ -149,13 +150,20 @@ def _process_single_output(
                                 "output": out_val,
                             }
 
+    if (
+        hasattr(pb_output, "end_session")
+        and pb_output.end_session
+        and pb_output.end_session.metadata
+    ):
+        end_session = True
+
     return {
         "text": text,
         "session_variables": dict(
             current_session_state
         ),  # Take a snapshot of variables for this output
         "tool_calls": list(tool_calls_map.values()),
-        "end_session": getattr(pb_output, "end_session", False),
+        "end_session": end_session
     }
 
 def send_message_to_cx_agent(
@@ -228,7 +236,7 @@ def send_message_to_cx_agent(
                         "tool_calls": msg_data["tool_calls"],
                     }
                 )
-
+                
                 if msg_data["end_session"]:
                     session_ended = True
 
@@ -242,7 +250,7 @@ def send_message_to_cx_agent(
 
         if session_ended:
             tool_response["end_session"] = (
-                "The session has ended. Do not send another message for this session."
+                f"The session {session_id} has ended by the server. Do not send another message for this session. You will get an error if you do so."
             )
 
     except Exception as e:

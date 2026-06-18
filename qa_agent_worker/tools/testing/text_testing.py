@@ -112,6 +112,12 @@ def _execute_test_case_text(
         )
         actual_turns.append(actual_turn)
 
+        print(response)
+
+        if "end_session" in response:
+            print("  [EXECUTE TEXT] CX Agent indicated end of session. Stopping test execution early.")
+            break
+
     # Save gathered actual results
     test_case.actual_test_procedure = ActualTestProcedure(
         actual_turns=actual_turns,

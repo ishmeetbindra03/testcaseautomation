@@ -33,7 +33,7 @@ gcloud auth application-default set-quota-project <project_id>
 
 ### Scripts
 
- python test_runner.py --input_csv <input> --results_dir <directory> --project_id <project_id> --region <region> --app_id  <cxas app id> --modality <text | voice>
+ python test_runner.py --input_csv <input> --results_dir <directory> --project_id <project_id> --region <region> --app_id  <cxas app id> --modality <text | voice> --max_parallel_worker
 
 
 

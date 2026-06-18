@@ -13,11 +13,9 @@
 # limitations under the License.
 
 import os
-import uuid
 import json
 import time
 import random
-from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
 from google.adk.tools import ToolContext
 from google import genai
@@ -25,7 +23,6 @@ from google.genai import types
 
 from ...models import (
     TestCase,
-    ActualTurn,
     ActualMessage,
     MessageEvaluation,
     TestCaseResult,
@@ -38,7 +35,6 @@ from ...models import (
     TranscriptEvaluationResponse
 )
 from ...prompts import EVAL_SIMILARITY_PROMPT_TEMPLATE
-from ..cxas import send_message_to_cx_agent
 
 GEMINI_MODEL = os.getenv("EVALUATE_GEMINI_MODEL", "gemini-3.1-flash-lite")
 SIMILARITY_THRESHOLD = os.getenv("SIMILARITY_THRESHOLD", 3)
@@ -283,10 +279,15 @@ def _evaluate_test_case_expectations(test_case: TestCase) -> TestCase:
     
     client = genai.Client(vertexai=True)
     all_passed = True
-
     expected_procedure = test_case.expected_test_procedure
     actual_procedure = test_case.actual_test_procedure or ActualTestProcedure()
     actual_turns = actual_procedure.actual_turns
+
+    # Check if the session ended unexpectedly early
+    # (i.e. we executed fewer turns than expected)
+    if len(actual_turns) < len(expected_procedure.turn_expectations):
+        print(f"  [ERROR] Test case ended unexpectedly early: Executed only {len(actual_turns)} of {len(expected_procedure.turn_expectations)} expected turns.")
+        all_passed = False
 
     # 1. Verify expected Turn expectations
     for idx, expected_turn in enumerate(expected_procedure.turn_expectations):
@@ -690,137 +691,3 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
 
     # 3. Assemble and return final dictionary (skipping reasoning)
     return final_output
-
-def execute_test_case(
-    tcid: str,
-    context: ToolContext,
-) -> str:
-    """Reads a TestCase from state, executes it against CX Agent, programmatically checks all expectations, and updates overall_result.
-
-    This tool sends the user messages specified in each turn of the test_procedure to the
-    CX Agent agent under test, captures the agent's actual responses and cumulative 
-    session variables, and programmatically evaluates them using exact matching and LLM-as-judge semantic similarity.
-
-    Args:
-        tcid: The unique test case identifier (e.g., "tc_001") whose TestCase is stored in context.state.
-        context: The ADK ToolContext (automatically injected).
-
-    Returns:
-        dict: The result of the test case    
-    """
-    if tcid not in context.state["test_cases"]:
-        return f"Test case id {tcid} not found in state."
-
-    print("\n========================================================")
-    print(f"[EXECUTE] Initializing Test Case Run: {tcid}")
-    print("========================================================")
-
-    try:
-        test_case = TestCase.model_validate(context.state["test_cases"][tcid])
-    except Exception as e:
-        print(f"[ERROR] Failed to validate test case {tcid}: {str(e)}")
-        return f"Failed to validate test case {tcid}: {str(e)}"
-
-    session_id = str(uuid.uuid4())
-    test_case.session_id = session_id
-    print(f"[EXECUTE] Started CX Agent conversation session: {session_id}")
-
-    actual_turns: List[ActualTurn] = []
-    current_vars: Dict[str, Any] = dict(test_case.initial_input_variables or {})
-
-    # Execute the test case sequential conversation
-    for idx, turn in enumerate(test_case.expected_test_procedure.turn_expectations):
-        turn_id = turn.turn_id if turn.turn_id is not None else (idx + 1)
-        print(f"\n--- [EXECUTE] Executing Turn {turn_id} ---")
-
-        user_text = ""
-        if turn.user_message and turn.user_message.text:
-            user_text = turn.user_message.text.text
-
-        send_vars = {}
-        if idx == 0 and test_case.initial_input_variables:
-            send_vars.update(test_case.initial_input_variables)
-
-        actual_user = ActualMessage(text=user_text, vars=dict(send_vars))
-        if user_text:
-            print(f"  User:  {user_text}")
-
-        # Send utterance to CX Agent
-        print("  [EXECUTE] Sending request to CX Agent agent...")
-        response = send_message_to_cx_agent(
-            project_id=test_case.project_id,
-            region_id=test_case.region_id,
-            app_id=test_case.app_id,
-            text=user_text,
-            session_id=session_id,
-            context=context,
-            session_variables=send_vars if send_vars else None
-        )
-
-        if "status" in response and response["status"] == "error":
-            test_case.overall_result = TestCaseResult.ERROR
-            context.state["test_cases"][tcid] = test_case.model_dump(mode='json')
-            print(f"  [ERROR] CX interaction failed at turn {turn_id}: {response.get('error')}")
-            return f"Error executing test case turn {turn_id}: {response.get('error')}"
-
-        agent_messages = response.get("agent_messages", [])
-        agent_text = " ".join([m.get("text", "") for m in agent_messages if m.get("text")]).strip()
-
-        last_vars = {}
-
-        if agent_messages:
-            for agent_message in agent_messages:
-                last_vars.update(agent_message.get("session_variables", {}))
-
-        # Compute strictly updated or newly added variables on this turn
-        updated_vars_this_turn = {}
-        for k, v in last_vars.items():
-            if k not in current_vars or current_vars[k] != v:
-                updated_vars_this_turn[k] = v
-
-        current_vars.update(last_vars)
-
-        actual_agent = ActualMessage(text=agent_text, vars=dict(updated_vars_this_turn))
-        if agent_text:
-            print(f"  Agent: {agent_text}")
-
-        print(f"  [EXECUTE] Updated variables after Turn {turn_id}: {updated_vars_this_turn}")
-
-        turn_timestamp = datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S %Z")
-        actual_turn = ActualTurn(
-            turn_id=turn_id,
-            timestamp=turn_timestamp,
-            user_message=actual_user,
-            agent_message=actual_agent
-        )
-        actual_turns.append(actual_turn)
-
-    # Save gathered actual results
-    test_case.actual_test_procedure = ActualTestProcedure(
-        actual_turns=actual_turns,
-        actual_variables=current_vars
-    )
-
-    print(f"\n[EXECUTE] Conversation finished. Saved {len(actual_turns)} turns.")
-
-    # Programmatically evaluate actuals against expectations
-    try:
-        print("\n========================================================")
-        print("Starting Test Case Expectations Evaluations")
-        test_case = _evaluate_test_case_expectations(test_case)
-    except Exception as e:
-        print(f"[ERROR] Evaluation failed: {str(e)}")
-        test_case.overall_result = TestCaseResult.ERROR
-        context.state["test_cases"][tcid] = test_case.model_dump(mode='json')
-        return f"Execution succeeded, but programmatic evaluation failed: {str(e)}"
-
-    # Save back to context state
-    print("Savings to context state")
-    context.state["test_cases"][tcid] = test_case.model_dump(mode='json')
-    context.state["final_output"] = _get_final_output(tcid, context)
-
-    # Return structured test execution summary report
-    status_emoji = "✅ PASSED" if test_case.overall_result == TestCaseResult.PASSED else "❌ FAILED"
-    return f"Test Case {tcid} Execution Report:\nResult: {status_emoji}\nTurns Evaluated: {len(actual_turns)}"
-
-
