@@ -131,8 +131,9 @@ class TestCase(BaseModel):
 
 class SimilarityEvaluation(BaseModel):
     """Pydantic model for structured Gemini similarity evaluations."""
-    score: int = Field(description="Similarity score between 1 (Not similar) and 5 (Very strongly similar)")
     reasoning: str = Field(description="A brief rationale for the assigned score")
+    score: int = Field(description="Similarity score between 1 (Not similar) and 5 (Very strongly similar)")
+    
 
 class TranscriptExpectationEvaluation(BaseModel):
     """Evaluation result for a single transcript expectation."""

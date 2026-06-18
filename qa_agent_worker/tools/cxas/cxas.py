@@ -13,6 +13,8 @@
 # limitations under the License.
 
 from datetime import datetime
+import random
+import time
 from typing import Any, Dict, Optional
 
 from google.adk.tools import ToolContext
@@ -191,12 +193,22 @@ def send_message_to_cx_agent(
 
     # Send the request using cxas-scrapi Sessions client
     try:
-        response = sessions_client.run(
-            session_id=session_id,
-            text=text,
-            variables=session_variables,
-            modality=modality,
-        )
+        max_retries = 3
+        delay = 1.0  # Initial delay of 1 second
+        for attempt in range(max_retries + 1):
+            try:
+                response = sessions_client.run(
+                    session_id=session_id,
+                    text=text,
+                    variables=session_variables,
+                    modality=modality,
+                )
+                break
+            except Exception as e:
+                if attempt == max_retries:
+                    raise e
+                sleep_time = delay * (2 ** attempt) + random.uniform(0.1, 0.5)
+                time.sleep(sleep_time)
 
         agent_messages = []
         current_session_state = {}  # Tracks cumulative variables across multiple outputs

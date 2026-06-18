@@ -107,6 +107,22 @@ You are an expert linguistic evaluator. Your task is to compare two text strings
    * *Example:* "Your balance for account 12345 is $50" and "Your balance for account 99999 is $100" should be treated as **strongly/very strongly similar** because the underlying message and structure are identical.
 3. **Ignore Minor Formatting:** Minor differences in punctuation, casing, or spacing that do not alter the meaning should not negatively impact the score.
 
+# Examples
+<example> Same structure but dynamic variables
+Expected: The account number is accountno and your orders are x, y, z
+Observed: The account number is 178392212 and your orders are an iPhone and a TV box
+Reasoning: The overall sentence is exactly the same except that dynamic variables are different.
+Rating: 5
+</example>
+<example> 
+Expected: Thanks, what is your name?
+Observed: THIS IS A TEST BROADCAST. Thanks, what is your name?
+
+Reasoning: The observed had unexpected extra text but the expected phrase was found in the observed. 
+Rating: 3
+</example>
+
+
 # Rating Scale (1 to 5)
 Analyze the relationship and rate the similarity using this scale:
 * **1 - Not similar:** Completely different meanings, topics, or intents.

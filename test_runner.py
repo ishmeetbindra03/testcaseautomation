@@ -362,6 +362,20 @@ def generate_individual_html(row_result: dict) -> str:
     overall_result_upper = overall_result.upper()
     raw_json_str = json.dumps(row_result, indent=4).replace("</script>", "<\\/script>")
 
+    cx_insights_link = ""
+    if not is_error and session_id != "N/A" and project_id != "N/A" and region != "N/A":
+        raw_project_id = str(agent_output.get("project_id", ""))
+        raw_region = str(agent_output.get("region", ""))
+        raw_session_id = str(agent_output.get("session_id", ""))
+        if raw_project_id and raw_region and raw_session_id:
+            url = f"https://ccai.cloud.google.com/insights/projects/{raw_project_id}/locations/{raw_region}/quality/conversations/{raw_session_id}"
+            cx_insights_link = f"""
+            <a href="{url}" target="_blank" style="color: var(--accent-info); text-decoration: none; margin-left: 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(59, 130, 246, 0.3); background-color: rgba(59, 130, 246, 0.1); padding: 2px 8px; border-radius: 4px; font-family: sans-serif; transition: all var(--transition-speed);" title="View in CX Insights" onmouseover="this.style.backgroundColor='rgba(59, 130, 246, 0.2)'; this.style.borderColor='rgba(59, 130, 246, 0.5)';" onmouseout="this.style.backgroundColor='rgba(59, 130, 246, 0.1)'; this.style.borderColor='rgba(59, 130, 246, 0.3)';">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                <span style="font-weight: 500;">CX Insights</span>
+            </a>
+            """
+
     html_content = INDIVIDUAL_HTML_TEMPLATE
     html_content = html_content.replace("{row_index}", str(row_index))
     html_content = html_content.replace("{overall_result_upper}", overall_result_upper)
@@ -369,6 +383,7 @@ def generate_individual_html(row_result: dict) -> str:
     html_content = html_content.replace("{overall_result}", overall_result)
     html_content = html_content.replace("{tcid}", tcid)
     html_content = html_content.replace("{session_id}", session_id)
+    html_content = html_content.replace("{cx_insights_link}", cx_insights_link)
     html_content = html_content.replace("{modality}", modality)
     html_content = html_content.replace("{project_id}", project_id)
     html_content = html_content.replace("{app_id}", app_id)
@@ -403,20 +418,37 @@ def generate_index_html(all_results: list, timestamp: str, csv_basename: str) ->
             status = "failed"
             project_id = "N/A"
             session_id = "N/A"
+            region = "N/A"
         else:
             status = agent_output.get("overall_result", "failed")
             project_id = html.escape(str(agent_output.get("project_id", "N/A")))
             session_id = html.escape(str(agent_output.get("session_id", "N/A")))
+            region = html.escape(str(agent_output.get("region", "N/A")))
             
         badge_class = "badge-passed" if status == "passed" else "badge-failed"
         detail_link = f"{csv_basename}_{row_index}.html"
+        
+        cx_link = ""
+        if not is_error and session_id != "N/A" and project_id != "N/A" and region != "N/A":
+            raw_project_id = str(agent_output.get("project_id", ""))
+            raw_region = str(agent_output.get("region", ""))
+            raw_session_id = str(agent_output.get("session_id", ""))
+            if raw_project_id and raw_region and raw_session_id:
+                url = f"https://ccai.cloud.google.com/insights/projects/{raw_project_id}/locations/{raw_region}/quality/conversations/{raw_session_id}"
+                cx_link = f"""
+                <a href="{url}" target="_blank" style="color: var(--accent-info); text-decoration: none; margin-left: 6px; display: inline-flex; align-items: center;" title="View in CX Insights">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </a>
+                """
         
         rows_html += f"""
         <tr data-status="{status}">
             <td style="font-weight: 600;">#{row_index}</td>
             <td style="font-family: 'Fira Code', monospace; color: var(--accent-info);">{tcid}</td>
             <td>{project_id}</td>
-            <td style="font-family: 'Fira Code', monospace; font-size: 12px; color: var(--text-secondary);">{session_id}</td>
+            <td style="font-family: 'Fira Code', monospace; font-size: 12px; color: var(--text-secondary);">
+                <div style="display: flex; align-items: center; gap: 4px;">{session_id}{cx_link}</div>
+            </td>
             <td><span class="badge {badge_class}">{status}</span></td>
             <td><a href="{detail_link}" class="action-link">View Details &rarr;</a></td>
         </tr>
@@ -953,7 +985,7 @@ INDIVIDUAL_HTML_TEMPLATE = """<!DOCTYPE html>
                     </div>
                     <div class="kv-item">
                         <span class="kv-label">Session ID</span>
-                        <span class="kv-value">{session_id}</span>
+                        <span class="kv-value" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">{session_id}{cx_insights_link}</span>
                     </div>
                     <div class="kv-item">
                         <span class="kv-label">Modality</span>

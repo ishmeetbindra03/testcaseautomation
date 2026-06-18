@@ -229,3 +229,5 @@ qa_agent_worker/.adk/session.db
 
 *.code-workspace
 results
+
+*.zip

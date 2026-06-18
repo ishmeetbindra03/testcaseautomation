@@ -41,7 +41,7 @@ from ...prompts import EVAL_SIMILARITY_PROMPT_TEMPLATE
 from ..cxas import send_message_to_cx_agent
 
 GEMINI_MODEL = os.getenv("EVALUATE_GEMINI_MODEL", "gemini-3.1-flash-lite")
-
+SIMILARITY_THRESHOLD = os.getenv("SIMILARITY_THRESHOLD", 3)
 
 def _generate_content_with_retry(
     client: genai.Client,
@@ -119,13 +119,14 @@ def _evaluate_text_expectation(expected: Optional[TextExpectation], actual_text:
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type='application/json',
-                    response_schema=SimilarityEvaluation
+                    response_schema=SimilarityEvaluation,
+                    thinking_config=types.ThinkingConfig(thinking_level="high")
                 )
             )
             data = json.loads(res.text)
             score = data.get("score", 1)
             reasoning = data.get("reasoning", "")
-            passed = (score >= 4)
+            passed = (score >= SIMILARITY_THRESHOLD)
             print(f"           Gemini Similarity Score: {score}/5 - {'PASS' if passed else 'FAIL'}")
             print(f"           Gemini Reasoning: {reasoning}")
             return {"passed": passed, "score": score, "reasoning": reasoning}
@@ -178,19 +179,10 @@ def _evaluate_variable_expectation(expected: VariableExpectation, actual_vars: D
             return {"passed": True, "actual": actual_val, "score": 5, "reasoning": "Optimized: Exact match found. Short-circuited Gemini call."}
 
         print("        -> Running semantic variable similarity check via Gemini...")
-        prompt = f"""
-        Compare the following two variable values for semantic similarity.
-        
-        Expected Value: "{expected_val}"
-        Actual Value: "{actual_val}"
-        
-        Rate the similarity on a scale from 1 to 5:
-        1 - Not similar
-        2 - Somewhat similar
-        3 - Moderately similar
-        4 - Strongly similar
-        5 - Very strongly similar
-        """
+        prompt = EVAL_SIMILARITY_PROMPT_TEMPLATE.format(
+            expected_text=expected_val,
+            actual_text=actual_val
+        )
         try:
             res = _generate_content_with_retry(
                 client=client,
@@ -204,7 +196,7 @@ def _evaluate_variable_expectation(expected: VariableExpectation, actual_vars: D
             data = json.loads(res.text)
             score = data.get("score", 1)
             reasoning = data.get("reasoning", "")
-            passed = (score >= 4)
+            passed = (score >= SIMILARITY_THRESHOLD)
             print(f"           Gemini Similarity Score for '{name}': {score}/5 - {'PASS' if passed else 'FAIL'}")
             print(f"           Gemini Reasoning: {reasoning}")
             return {"passed": passed, "actual": actual_val, "score": score, "reasoning": reasoning}
