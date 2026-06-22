@@ -12,6 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .execute import execute_test_case
+from .execute import execute_test_case, initialize_test_case
 
-__all__ = ["execute_test_case"]
+__all__ = ["execute_test_case", "initialize_test_case"]

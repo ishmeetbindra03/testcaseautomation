@@ -19,6 +19,10 @@ def generate_individual_html(row_result: dict) -> str:
     test_procedure = html.escape(str(input_data.get("Test Procedure", "N/A")))
     
     agent_output = row_result.get("agent_output", {})
+
+    print(f"Agent Output: {agent_output}")
+
+
     tcid = html.escape(str(agent_output.get("tcid", "N/A")))
     is_error = "error" in agent_output or not isinstance(agent_output, dict)
     

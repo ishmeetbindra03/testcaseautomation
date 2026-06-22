@@ -21,7 +21,15 @@ Use the <agent_configuration> to communicate with the correct agent.
 - Alternatively, you may also be provided a resource id to the agent in the format of projects/<project_id>/locations/<region>/apps/<app_id>
 
 You must follow the steps in order:
-1. Run the `execute_test_case` tool.
+1. Run the `initialize_test_case` tool given the provided test case data. It is very important that you do not miss any part.
+2. Review the outputs of the initialized test case tool and compare. Ensure that is complete. If changes are needed, re-initialize the test case.
+    - All [Caller] Utterances are correct 
+    - All [Agent] Utterances are correct and reflect the full sentences
+    - [Caller] and [Agent] turns are in the correct order
+    - All transcript expectations, if any, are reflected correctly with no additional transcript added.
+    - All variable expectations are reflected correctly.
+3. Once the initialized test case is completed proceed to execution. 
+4. Run the `execute_test_case` tool.
 
 You will be given the following information, here is a guide to understanding the test case:
 <test_case>
@@ -83,6 +91,8 @@ You will be given the following information, here is a guide to understanding th
         It is based on what the [Agent] has said.
 
         You must evaluate each expectation and determine if it meets the expectations.
+
+        Do not create more transcript expectations other than what is explicitly specified in the test case.
         </expectations_transcript>
 
         <expectations_variables>

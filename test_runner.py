@@ -138,7 +138,10 @@ async def process_csv(input_csv: str, results_dir: str, project_id: str, region:
                 {add_vars}
                 </additional_variables>
 
-                Please process the following data and return JSON:\n{row_text}
+                Please process the following data and return JSON:\n
+                <test_case>
+                {row_text}
+                </test_case>
                 """
 
                 message = UserContent(
@@ -175,6 +178,8 @@ async def process_csv(input_csv: str, results_dir: str, project_id: str, region:
                     "input_data": row,
                     "agent_output": parsed_json
                 }
+
+                print(f"Raw row_result: {row_result}")
 
                 # 6. Dump the result into its individual .json file within the timestamped folder
                 out_filename = f"{csv_basename}_{row_num}.json"

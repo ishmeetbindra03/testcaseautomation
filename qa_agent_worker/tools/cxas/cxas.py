@@ -161,7 +161,7 @@ def _process_single_output(
         "text": text,
         "session_variables": dict(
             current_session_state
-        ),  # Take a snapshot of variables for this output
+        ),
         "tool_calls": list(tool_calls_map.values()),
         "end_session": end_session
     }
@@ -235,7 +235,7 @@ def send_message_to_cx_agent(
         current_session_state = {}  # Tracks cumulative variables across multiple outputs
         session_ended = False
 
-        # print(response)
+        print(f"RAW AGENT RESPONSE: {response}")
 
         # 7. Extract data for each individual output block
         if response.outputs:

@@ -23,8 +23,7 @@ from google.adk.models import LlmRequest, LlmResponse
 from google.genai import types
 
 from .prompts import QA_AGENT_INSTRUCTIONS
-from .tools.testing import execute_test_case
-from .tools.cxas import send_message_to_cx_agent
+from .tools.testing import initialize_test_case, execute_test_case
 
 
 
@@ -54,6 +53,6 @@ root_agent = Agent(
     name="qa_agent_worker",
     description="An QA agent that executes test cases",
     instruction=QA_AGENT_INSTRUCTIONS,
-    tools=[execute_test_case, send_message_to_cx_agent],
+    tools=[initialize_test_case, execute_test_case],
     before_model_callback=before_model_callback,
 )
