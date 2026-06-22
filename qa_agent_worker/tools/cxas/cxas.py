@@ -170,9 +170,10 @@ def send_message_to_cx_agent(
     project_id: str,
     region_id: str,
     app_id: str,
-    text: str,
     session_id: str,
     context: ToolContext,
+    text: Optional[str] = None,
+    event: Optional[str] = None,
     session_variables: Optional[Dict[str, str]] = {},
     modality: str = "text",
 ) -> Dict[str, Any]:
@@ -183,9 +184,10 @@ def send_message_to_cx_agent(
         region_id (str): The region id (us or eu)
         app_id (str): The application id
         session_id (str): The session id to use.
-        text (str): The text to send to the agent
-        session_variables (Dict[str, str]): key-value pair of session variables to send
-        modality (str): The interaction modality, 'text' or 'audio' (voice)
+        text (str): Optional. The text to send to the agent
+        event (str): Optional. Event to send to the agent.
+        session_variables (Dict[str, str]): Optional. key-value pair of session variables to send
+        modality (str): The interaction modality, 'text' or 'audio' (voice). Defaults to text.
 
     Returns:
         dict:
@@ -203,14 +205,25 @@ def send_message_to_cx_agent(
     try:
         max_retries = 3
         delay = 1.0  # Initial delay of 1 second
+
+        run_request = {
+            "session_id": session_id,
+            "modality": modality
+        }
+
+        if text:
+            run_request.update({"text":text})
+        
+        if event:
+            run_request.update({"event": event})
+
+        if session_variables:
+            run_request.update({"variables": session_variables})
+
+
         for attempt in range(max_retries + 1):
             try:
-                response = sessions_client.run(
-                    session_id=session_id,
-                    text=text,
-                    variables=session_variables,
-                    modality=modality,
-                )
+                response = sessions_client.run(**run_request)
                 break
             except Exception as e:
                 if attempt == max_retries:

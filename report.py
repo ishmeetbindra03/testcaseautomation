@@ -14,11 +14,12 @@ warnings.filterwarnings("ignore")
 def generate_individual_html(row_result: dict) -> str:
     row_index = row_result.get("row_index", 0)
     input_data = row_result.get("input_data", {})
-    tcid = html.escape(str(input_data.get("TCID", "N/A")))
+
     agent_config = html.escape(str(input_data.get("Agent Config", "N/A")))
     test_procedure = html.escape(str(input_data.get("Test Procedure", "N/A")))
     
     agent_output = row_result.get("agent_output", {})
+    tcid = html.escape(str(agent_output.get("tcid", "N/A")))
     is_error = "error" in agent_output or not isinstance(agent_output, dict)
     
     if is_error:

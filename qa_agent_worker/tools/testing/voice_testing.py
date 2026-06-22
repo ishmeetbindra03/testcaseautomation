@@ -47,25 +47,30 @@ def _execute_test_case_voice(
         if turn.user_message and turn.user_message.text:
             user_text = turn.user_message.text.text
 
+        event = None
+        if turn.user_message and turn.user_message.event:
+            event = turn.user_message.event.event
+            
         send_vars = {}
         if idx == 0 and test_case.initial_input_variables:
             send_vars.update(test_case.initial_input_variables)
 
         actual_user = ActualMessage(text=user_text, vars=dict(send_vars))
         if user_text:
-            print(f"  User (Text input for TTS): {user_text}")
+            print(f"  User:  {user_text}")
 
-        # Send utterance to CX Agent using audio (voice) modality
-        print("  [EXECUTE VOICE] Sending request to CX Agent (as voice/audio)...")
+        # Send utterance to CX Agent using text modality
+        print("  [EXECUTE TEXT] Sending request to CX Agent...")
         response = send_message_to_cx_agent(
             project_id=test_case.project_id,
             region_id=test_case.region_id,
             app_id=test_case.app_id,
             text=user_text,
+            event=event,
             session_id=test_case.session_id,
             context=tool_context,
             session_variables=send_vars if send_vars else None,
-            modality="audio"
+            modality="text"
         )
 
         if "status" in response and response["status"] == "error":
@@ -77,24 +82,16 @@ def _execute_test_case_voice(
         agent_messages = response.get("agent_messages", [])
         agent_text = " ".join([m.get("text", "") for m in agent_messages if m.get("text")]).strip()
 
-        last_vars = {}
+        turn_vars = {}
         if agent_messages:
             for agent_message in agent_messages:
-                last_vars.update(agent_message.get("session_variables", {}))
+                turn_vars.update(agent_message.get("session_variables", {}))
 
-        # Compute strictly updated or newly added variables on this turn
-        updated_vars_this_turn = {}
-        for k, v in last_vars.items():
-            if k not in current_vars or current_vars[k] != v:
-                updated_vars_this_turn[k] = v
-
-        current_vars.update(last_vars)
-
-        actual_agent = ActualMessage(text=agent_text, vars=dict(updated_vars_this_turn))
+        actual_agent = ActualMessage(text=agent_text, vars=dict(turn_vars))
         if agent_text:
             print(f"  Agent: {agent_text}")
-
-        print(f"  [EXECUTE VOICE] Updated variables after Turn {turn_id}: {updated_vars_this_turn}")
+        if turn_vars:
+            print(f". Agent: {turn_vars}")
 
         turn_timestamp = datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S %Z")
         actual_turn = ActualTurn(
@@ -104,6 +101,7 @@ def _execute_test_case_voice(
             agent_message=actual_agent
         )
         actual_turns.append(actual_turn)
+        current_vars.update(turn_vars)
 
         if "end_session" in response:
             print("  [EXECUTE VOICE] CX Agent indicated end of session. Stopping test execution early.")

@@ -39,6 +39,11 @@ class TextExpectation(Expectation):
     expectation_type: ExpectationType = ExpectationType.SEMANTIC
     text: str
 
+class EventExpectation(Expectation):
+    """Defines an event expectation"""
+    expectation_type: ExpectationType= ExpectationType.EXACT
+    event: str
+
 class VariableExpectation(Expectation):
     """Defines a variable expectation"""
     expectation_type: ExpectationType = ExpectationType.EXACT
@@ -52,6 +57,7 @@ class VariablesExpectation(Expectation):
 class UserMessage(BaseModel):
     """Defines a user/caller message expectations in a turn"""
     text: Optional[TextExpectation] = None
+    event: Optional[EventExpectation] = None
     vars: Optional[VariablesExpectation] = None
 
 class AgentMessage(BaseModel):
