@@ -91,18 +91,20 @@ def _execute_test_case(
         
         if turn.user_message and turn.user_message.vars:
             send_vars.update(turn.user_message.vars.vars)
+        
+        user_message.update({"session_variables": send_vars})
 
         actual_user = ActualMessage(text=user_text, event=event, dtmf=dtmf, vars=dict(send_vars))
 
         # Send utterance to CX Agent using text modality
-        print("  [EXECUTE TEXT] Sending request to CX Agent...")
+        logging.info("  [EXECUTE {test_case.modality.upper()}] Sending request to CX Agent...")
 
         response = send_message_to_cx_agent(**user_message)
 
         if "status" in response and response["status"] == "error":
             test_case.overall_result = TestCaseResult.ERROR
             tool_context.state["test_cases"][tcid] = test_case.model_dump(mode='json')
-            print(f"  [ERROR] CX interaction failed at turn {turn_id}: {response.get('error')}")
+            logging.error(f"  [ERROR] CX interaction failed at turn {turn_id}: {response.get('error')}")
             return f"Error executing test case turn {turn_id}: {response.get('error')}"
 
         agent_messages = response.get("agent_messages", [])
@@ -130,7 +132,7 @@ def _execute_test_case(
         current_vars.update(turn_vars)
 
         if "end_session" in response:
-            print("  [EXECUTE TEXT] CX Agent indicated end of session. Stopping test execution early.")
+            print("  [EXECUTE] CX Agent indicated end of session. Stopping test execution early.")
             break
 
     # Save gathered actual results
@@ -139,7 +141,7 @@ def _execute_test_case(
         actual_variables=current_vars
     )
 
-    print(f"\n[EXECUTE TEXT] Conversation finished. Saved {len(actual_turns)} turns.")
+    print(f"\n[EXECUTE] Conversation finished. Saved {len(actual_turns)} turns.")
 
     # Programmatically evaluate actuals against expectations
     try:

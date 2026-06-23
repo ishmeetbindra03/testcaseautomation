@@ -4,7 +4,6 @@ import os
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
 
 import json
-from datetime import datetime
 import warnings
 import html
 # Import your agent from your agent.py file
@@ -14,11 +13,16 @@ warnings.filterwarnings("ignore")
 def generate_individual_html(row_result: dict) -> str:
     row_index = row_result.get("row_index", 0)
     input_data = row_result.get("input_data", {})
-
-    agent_config = html.escape(str(input_data.get("Agent Config", "N/A")))
-    test_procedure = html.escape(str(input_data.get("Test Procedure", "N/A")))
-    
     agent_output = row_result.get("agent_output", {})
+
+    agent_config = html.escape(str({
+        "project_id": agent_output.get("project_id", "N/A"),
+        "region": agent_output.get("region", "N/A"),
+        "app_id": agent_output.get("app_id", "N/A"),
+    }))
+
+    test_procedure = html.escape(str(agent_output.get("original_test_procedure", "N/A")))
+    
 
     print(f"Agent Output: {agent_output}")
 
@@ -26,112 +30,89 @@ def generate_individual_html(row_result: dict) -> str:
     tcid = html.escape(str(agent_output.get("tcid", "N/A")))
     is_error = "error" in agent_output or not isinstance(agent_output, dict)
     
-    if is_error:
-        overall_result = "failed"
-        project_id = "N/A"
-        region = "N/A"
-        app_id = "N/A"
-        session_id = "N/A"
-        modality = "N/A"
-        timestamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S UTC")
-        
-        # Display parsing error
-        err_msg = html.escape(str(agent_output.get("error", "Unknown JSON Parsing Error")))
-        raw_text = html.escape(str(agent_output.get("raw_text", "")))
-        expectations_html = f"""
-        <div class="expectation-item" style="border-color: rgba(244, 63, 94, 0.25); background-color: rgba(244, 63, 94, 0.04);">
-            <span class="expectation-status-icon">❌</span>
-            <div class="expectation-content">
-                <div class="expectation-label" style="color: var(--accent-fail); font-weight: 600;">JSON Parsing Error</div>
-                <div class="expectation-actual" style="color: var(--text-primary); font-weight: 500;">Failed to parse agent response as valid JSON: {err_msg}</div>
-                <div class="pre-container" style="margin-top: 8px; font-size: 11px;">{raw_text}</div>
-            </div>
-        </div>
-        """
-        transcript_html = '<div style="color: var(--text-secondary); font-style: italic;">No transcript available due to JSON parsing error.</div>'
-    else:
-        overall_result = agent_output.get("overall_result", "failed")
-        project_id = html.escape(str(agent_output.get("project_id", "N/A")))
-        region = html.escape(str(agent_output.get("region", "N/A")))
-        app_id = html.escape(str(agent_output.get("app_id", "N/A")))
-        session_id = html.escape(str(agent_output.get("session_id", "N/A")))
-        modality = html.escape(str(agent_output.get("modality", "text")))
-        timestamp = html.escape(str(agent_output.get("timestamp", "N/A")))
-        
-        # Build expectations HTML
-        expectations = agent_output.get("expectations", [])
-        expectations_html = ""
-        if isinstance(expectations, list):
-            for idx, exp in enumerate(expectations):
-                if isinstance(exp, dict):
-                    exp_text = html.escape(str(exp.get("expectation", "")))
-                    exp_result = html.escape(str(exp.get("result", "")))
-                    exp_actual = html.escape(str(exp.get("actual", "")))
-                    
-                    if exp_result == "passed":
-                        icon = "✔️"
-                        border_color = "rgba(16, 185, 129, 0.25)"
-                        bg_color = "rgba(16, 185, 129, 0.04)"
-                        label_color = "var(--accent-success)"
-                    else:
-                        icon = "❌"
-                        border_color = "rgba(244, 63, 94, 0.25)"
-                        bg_color = "rgba(244, 63, 94, 0.04)"
-                        label_color = "var(--accent-fail)"
-                        
-                    extra_info = ""
-                    if "action" in exp:
-                        action_escaped = html.escape(str(exp["action"]))
-                        extra_info += f'<div style="font-style: italic; color: var(--text-secondary); margin-top: 4px;">{action_escaped}</div>'
-                        
-                    if "session_variables" in exp and isinstance(exp["session_variables"], list):
-                        var_items = []
-                        for var in exp["session_variables"]:
-                            if isinstance(var, dict):
-                                v_name = html.escape(str(var.get("variable_name", "")))
-                                v_obs = html.escape(str(var.get("observed_value", "")))
-                                v_exp = html.escape(str(var.get("expected_value", "")))
-                                v_res = html.escape(str(var.get("result", "")))
-                                
-                                v_color = "var(--accent-success)" if v_res == "passed" else "var(--accent-fail)"
-                                v_icon = "✔️" if v_res == "passed" else "❌"
-                                var_items.append(
-                                    f'<span class="variable-pill" style="border-color: {v_color}; color: {v_color};">'
-                                    f'{v_icon} {v_name}: {v_obs} (expected {v_exp})'
-                                    f'</span>'
-                                )
-                            else:
-                                v_str = html.escape(str(var))
-                                var_items.append(
-                                    f'<span class="variable-pill" style="color: var(--text-secondary);">'
-                                    f'{v_str}'
-                                    f'</span>'
-                                )
-                        if var_items:
-                            extra_info += f'<div class="variables-pill-list" style="margin-top: 8px;">{" ".join(var_items)}</div>'
-                            
-                    expectations_html += f"""
-                    <div class="expectation-item" style="border-color: {border_color}; background-color: {bg_color};">
-                        <span class="expectation-status-icon">{icon}</span>
-                        <div class="expectation-content">
-                            <div class="expectation-label" style="color: {label_color}; font-weight: 600;">Expectation #{idx+1}</div>
-                            <div class="expectation-actual" style="color: var(--text-primary); font-weight: 500;">{exp_text}</div>
-                            {f'<div class="expectation-actual" style="margin-top: 4px;"><strong>Actual:</strong> {exp_actual}</div>' if exp_actual else ''}
-                            {extra_info}
-                        </div>
-                    </div>
-                    """
+
+    overall_result = agent_output.get("overall_result", "failed")
+    project_id = html.escape(str(agent_output.get("project_id", "N/A")))
+    region = html.escape(str(agent_output.get("region", "N/A")))
+    app_id = html.escape(str(agent_output.get("app_id", "N/A")))
+    session_id = html.escape(str(agent_output.get("session_id", "N/A")))
+    modality = html.escape(str(agent_output.get("modality", "text")))
+    timestamp = html.escape(str(agent_output.get("timestamp", "N/A")))
+    
+    # Build expectations HTML
+    expectations = agent_output.get("expectations", [])
+    expectations_html = ""
+    if isinstance(expectations, list):
+        for idx, exp in enumerate(expectations):
+            if isinstance(exp, dict):
+                exp_text = html.escape(str(exp.get("expectation", "")))
+                exp_result = html.escape(str(exp.get("result", "")))
+                exp_actual = html.escape(str(exp.get("actual", "")))
+                
+                if exp_result == "passed":
+                    icon = "✔️"
+                    border_color = "rgba(16, 185, 129, 0.25)"
+                    bg_color = "rgba(16, 185, 129, 0.04)"
+                    label_color = "var(--accent-success)"
                 else:
-                    exp_text = html.escape(str(exp))
-                    expectations_html += f"""
-                    <div class="expectation-item" style="border-color: rgba(244, 63, 94, 0.15); background-color: rgba(244, 63, 94, 0.02);">
-                        <span class="expectation-status-icon">❓</span>
-                        <div class="expectation-content">
-                            <div class="expectation-label" style="color: var(--text-secondary); font-weight: 600;">Expectation #{idx+1}</div>
-                            <div class="expectation-actual" style="color: var(--text-primary); font-weight: 500;">{exp_text}</div>
-                        </div>
+                    icon = "❌"
+                    border_color = "rgba(244, 63, 94, 0.25)"
+                    bg_color = "rgba(244, 63, 94, 0.04)"
+                    label_color = "var(--accent-fail)"
+                    
+                extra_info = ""
+                if "action" in exp:
+                    action_escaped = html.escape(str(exp["action"]))
+                    extra_info += f'<div style="font-style: italic; color: var(--text-secondary); margin-top: 4px;">{action_escaped}</div>'
+                    
+                if "session_variables" in exp and isinstance(exp["session_variables"], list):
+                    var_items = []
+                    for var in exp["session_variables"]:
+                        if isinstance(var, dict):
+                            v_name = html.escape(str(var.get("variable_name", "")))
+                            v_obs = html.escape(str(var.get("observed_value", "")))
+                            v_exp = html.escape(str(var.get("expected_value", "")))
+                            v_res = html.escape(str(var.get("result", "")))
+                            
+                            v_color = "var(--accent-success)" if v_res == "passed" else "var(--accent-fail)"
+                            v_icon = "✔️" if v_res == "passed" else "❌"
+                            var_items.append(
+                                f'<span class="variable-pill" style="border-color: {v_color}; color: {v_color};">'
+                                f'{v_icon} {v_name}: {v_obs} (expected {v_exp})'
+                                f'</span>'
+                            )
+                        else:
+                            v_str = html.escape(str(var))
+                            var_items.append(
+                                f'<span class="variable-pill" style="color: var(--text-secondary);">'
+                                f'{v_str}'
+                                f'</span>'
+                            )
+                    if var_items:
+                        extra_info += f'<div class="variables-pill-list" style="margin-top: 8px;">{" ".join(var_items)}</div>'
+                        
+                expectations_html += f"""
+                <div class="expectation-item" style="border-color: {border_color}; background-color: {bg_color};">
+                    <span class="expectation-status-icon">{icon}</span>
+                    <div class="expectation-content">
+                        <div class="expectation-label" style="color: {label_color}; font-weight: 600;">Expectation #{idx+1}</div>
+                        <div class="expectation-actual" style="color: var(--text-primary); font-weight: 500;">{exp_text}</div>
+                        {f'<div class="expectation-actual" style="margin-top: 4px;"><strong>Actual:</strong> {exp_actual}</div>' if exp_actual else ''}
+                        {extra_info}
                     </div>
-                    """
+                </div>
+                """
+            else:
+                exp_text = html.escape(str(exp))
+                expectations_html += f"""
+                <div class="expectation-item" style="border-color: rgba(244, 63, 94, 0.15); background-color: rgba(244, 63, 94, 0.02);">
+                    <span class="expectation-status-icon">❓</span>
+                    <div class="expectation-content">
+                        <div class="expectation-label" style="color: var(--text-secondary); font-weight: 600;">Expectation #{idx+1}</div>
+                        <div class="expectation-actual" style="color: var(--text-primary); font-weight: 500;">{exp_text}</div>
+                    </div>
+                </div>
+                """
             
         if not expectations_html:
             expectations_html = '<div style="color: var(--text-secondary); font-style: italic;">No expectations listed in the JSON output.</div>'

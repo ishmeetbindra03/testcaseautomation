@@ -629,23 +629,19 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
             "variable_name": name,
             "observed_value": observed_val,
             "expected_value": expected_val,
-            "result": "passed" if passed else ("pending" if test_case.overall_result == TestCaseResult.PENDING else "failed")
+            "result": "passed" if passed else "failed"
         })
 
-    var_exp_status = "passed"
-    if test_case.overall_result == TestCaseResult.PENDING:
-        var_exp_status = "pending"
-        var_exp_action = "The test case has not been executed yet."
-    elif not all_vars_passed:
-        var_exp_status = "failed"
+    if not all_vars_passed:
         var_exp_action = "The session variables were not set correctly."
     else:
         var_exp_action = "The session variables were set correctly."
 
     expectations.append({
-        "expectation": "The [Agent] set the correct variables exactly as expected.",
+        "expectation": "The [Agent] set the correct variables as expected. Note: This is CASE SENSITIVE for both variable names and values.",
         "action": var_exp_action,
-        "session_variables": session_variables_list
+        "session_variables": session_variables_list,
+        "result": "passed" if all_vars_passed else "failed"
     })
 
     # 2c. Transcript expectations (High level)
