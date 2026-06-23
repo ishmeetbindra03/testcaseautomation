@@ -237,10 +237,9 @@ def generate_index_html(all_results: list, timestamp: str, csv_basename: str) ->
     rows_html = ""
     for res in all_results:
         row_index = res.get("row_index", 0)
-        input_data = res.get("input_data", {})
-        tcid = html.escape(str(input_data.get("TCID", "N/A")))
-        
         agent_output = res.get("agent_output", {})
+        tcid = html.escape(str(agent_output.get("tcid", "N/A")))
+        
         is_error = "error" in agent_output or not isinstance(agent_output, dict)
         
         if is_error:
