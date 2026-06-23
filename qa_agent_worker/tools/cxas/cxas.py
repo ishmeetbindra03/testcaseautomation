@@ -189,7 +189,7 @@ def send_message_to_cx_agent(
         event (str): Optional. Event to send to the agent.
         dtmf (str): Optional. DTMF to send to the agent.
         session_variables (Dict[str, str]): Optional. key-value pair of session variables to send
-        modality (str): The interaction modality, 'text' or 'audio' (voice). Defaults to text.
+        modality (str): The interaction modality, 'text' or 'voice'. Defaults to text.
 
     Returns:
         dict:
@@ -210,8 +210,12 @@ def send_message_to_cx_agent(
 
         run_request = {
             "session_id": session_id,
-            "modality": modality
         }
+
+        if modality == "voice":
+            run_request.update({"modality": "audio"})
+        else:
+            run_request.update({"modality": "text"})
 
         if text:
             run_request.update({"text":text})

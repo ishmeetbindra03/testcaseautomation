@@ -35,6 +35,10 @@ from google.genai.types import Part, UserContent
 from qa_agent_worker.agent import root_agent
 from report import generate_index_html, generate_individual_html
 
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
 
 warnings.filterwarnings("ignore")
 
@@ -245,8 +249,8 @@ def main():
     parser.add_argument(
         "--modality", 
         required=True, 
-        choices=["text", "voice"],
-        help="The modality to use (must be 'text' or 'voice')"
+        choices=["text", "audio"],
+        help="The modality to use (must be 'text' or 'audio')"
     )
 
     parser.add_argument(

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Literal
 from enum import Enum
 from pydantic import BaseModel, Field
 
@@ -79,7 +79,9 @@ class Turn(BaseModel):
 
 class ActualMessage(BaseModel):
     """Defines an actual recorded message and variable state in a turn"""
-    text: str = ""
+    text: Optional[str] = None
+    event: Optional[str] = None
+    dtmf: Optional[str] = None
     vars: Dict[str, Any] = {}
 
 class MessageEvaluation(BaseModel):
@@ -134,12 +136,12 @@ class TestCase(BaseModel):
     session_id: Optional[str] = None
     start_time: str
     tcid: str
-    modality: str = "text"
+    modality: Literal["text", "audio"] = "text"
     initial_input_variables: Optional[Dict[str, Any]] = {}
-    overall_result: TestCaseResult = TestCaseResult.PENDING
-
+    original_test_procedure: str
     expected_test_procedure: ExpectedTestProcedure
     actual_test_procedure: Optional[ActualTestProcedure] = None
+    overall_result: TestCaseResult = TestCaseResult.PENDING
 
 class SimilarityEvaluation(BaseModel):
     """Pydantic model for structured Gemini similarity evaluations."""

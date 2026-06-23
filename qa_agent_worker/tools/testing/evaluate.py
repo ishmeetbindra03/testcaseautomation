@@ -684,6 +684,7 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
         "timestamp": test_case.start_time,
         "tcid": test_case.tcid,
         "initial_input_variables": test_case.initial_input_variables or {},
+        "original_test_procedure": test_case.original_test_procedure,
         "transcript": transcript,
         "expectations": expectations,
         "overall_result": test_case.overall_result.value if hasattr(test_case.overall_result, "value") else str(test_case.overall_result)
