@@ -174,6 +174,7 @@ def send_message_to_cx_agent(
     context: ToolContext,
     text: Optional[str] = None,
     event: Optional[str] = None,
+    dtmf: Optional[str] = None,
     session_variables: Optional[Dict[str, str]] = {},
     modality: str = "text",
 ) -> Dict[str, Any]:
@@ -186,6 +187,7 @@ def send_message_to_cx_agent(
         session_id (str): The session id to use.
         text (str): Optional. The text to send to the agent
         event (str): Optional. Event to send to the agent.
+        dtmf (str): Optional. DTMF to send to the agent.
         session_variables (Dict[str, str]): Optional. key-value pair of session variables to send
         modality (str): The interaction modality, 'text' or 'audio' (voice). Defaults to text.
 
@@ -217,9 +219,12 @@ def send_message_to_cx_agent(
         if event:
             run_request.update({"event": event})
 
+        if dtmf:
+            run_request.update({"dtmf": dtmf})
+
         if session_variables:
             run_request.update({"variables": session_variables})
-
+    
 
         for attempt in range(max_retries + 1):
             try:

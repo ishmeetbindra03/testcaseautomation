@@ -67,6 +67,8 @@ def initialize_test_case(
                         {"expectation_type": "any" | "exact" | "semantic" | "optional", "text": "value"}
                     - "event" (dict, optional): Expected event check, formatted as:
                         {"expectation_type": "any" | "exact" | "semantic" | "optional", "event": "value"}
+                    - "dtmf" (dict, optional): Expected dtmf digits check, formatted as:
+                        {"expectation_type": "any" | "exact" | "semantic" | "optional", "dtmf": "value"}
                     - "vars" (dict, optional): Expected variables, formatted as:
                         {"expectation_type": "any" | "exact" | "semantic" | "optional", "vars": [...]}
                 - "agent_message" (dict, optional): Expectations for the agent response turn.
