@@ -475,9 +475,13 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
             
             observed_text = ""
             vars_dict = {}
+            observed_event = None
+            observed_dtmf = None
             if actual_turn and actual_turn.user_message:
                 observed_text = actual_turn.user_message.text or ""
                 vars_dict = actual_turn.user_message.vars or {}
+                observed_event = actual_turn.user_message.event
+                observed_dtmf = actual_turn.user_message.dtmf
                 
             status = "passed"
             reasoning = ""
@@ -499,7 +503,9 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
                 "transcript_expectation": user_exp_type,
                 "transcript_expectation_status": status,
                 "variables": vars_dict,
-                "reasoning": reasoning
+                "reasoning": reasoning,
+                "event": observed_event,
+                "dtmf": observed_dtmf
             })
             
         # Add Agent Message (AgentMessage)
@@ -513,9 +519,13 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
             
             observed_text = ""
             vars_dict = {}
+            observed_event = None
+            observed_dtmf = None
             if actual_turn and actual_turn.agent_message:
                 observed_text = actual_turn.agent_message.text or ""
                 vars_dict = actual_turn.agent_message.vars or {}
+                observed_event = actual_turn.agent_message.event
+                observed_dtmf = actual_turn.agent_message.dtmf
                 
             status = "passed"
             reasoning = ""
@@ -537,7 +547,9 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
                 "transcript_expectation": agent_exp_type,
                 "transcript_expectation_status": status,
                 "variables": vars_dict,
-                "reasoning": reasoning
+                "reasoning": reasoning,
+                "event": observed_event,
+                "dtmf": observed_dtmf
             })
             
     # Handle any actual turns that didn't match an expected turn
@@ -553,7 +565,9 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
                     "transcript_expectation": "any",
                     "transcript_expectation_status": "passed",
                     "variables": at.user_message.vars or {},
-                    "reasoning": ""
+                    "reasoning": "",
+                    "event": at.user_message.event,
+                    "dtmf": at.user_message.dtmf
                 })
             # Agent
             if at.agent_message:
@@ -565,7 +579,9 @@ def _get_final_output(tcid: str, context: ToolContext) -> Dict[str, Any]:
                     "transcript_expectation": "any",
                     "transcript_expectation_status": "passed",
                     "variables": at.agent_message.vars or {},
-                    "reasoning": ""
+                    "reasoning": "",
+                    "event": at.agent_message.event,
+                    "dtmf": at.agent_message.dtmf
                 })
 
     # 2. Map expectations

@@ -140,6 +140,29 @@ def generate_individual_html(row_result: dict) -> str:
                 if not isinstance(variables, dict):
                     variables = {}
                 
+                turn_event = turn.get("event")
+                turn_dtmf = turn.get("dtmf")
+
+                event_html = ""
+                if turn_event:
+                    event_esc = html.escape(str(turn_event))
+                    event_html = f"""
+                    <div class="bubble-event" style="margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; background-color: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.25); color: #93c5fd; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-family: 'Fira Code', monospace; font-weight: 500; align-self: flex-start;">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+                        <span>Event: <strong>{event_esc}</strong></span>
+                    </div>
+                    """
+                
+                dtmf_html = ""
+                if turn_dtmf:
+                    dtmf_esc = html.escape(str(turn_dtmf))
+                    dtmf_html = f"""
+                    <div class="bubble-dtmf" style="margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; background-color: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); color: #fde047; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-family: 'Fira Code', monospace; font-weight: 500; align-self: flex-start;">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line><line x1="9" y1="15" x2="9.01" y2="15"></line><line x1="15" y1="15" x2="15.01" y2="15"></line></svg>
+                        <span>DTMF: <strong>{dtmf_esc}</strong></span>
+                    </div>
+                    """
+                
                 is_agent = (speaker.lower() == "agent")
                 bubble_class = "bubble-agent" if is_agent else "bubble-caller"
                 
@@ -179,6 +202,8 @@ def generate_individual_html(row_result: dict) -> str:
                         <span>{turn_timestamp}</span>
                     </div>
                     <div class="bubble-text">{observed if observed else '<span style="font-style: italic; color: var(--text-secondary);">[Silent / Empty]</span>'}</div>
+                    {event_html}
+                    {dtmf_html}
                     {expectation_block}
                     {vars_html}
                 </div>
