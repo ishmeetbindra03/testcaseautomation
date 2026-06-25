@@ -33,9 +33,9 @@ gcloud auth application-default set-quota-project <project_id>
 
 ### Scripts
 
- python test_runner.py --input_csv <input> --results_dir <directory> --project_id <project_id> --region <region> --app_id  <cxas app id> --modality <text | voice> --max_parallel_worker
+python test_runner.py --input_csv <input> --results_dir <directory> --project_id <project_id> --region <region> --app_id  <cxas app id> --modality <text | audio> --max_parallel_worker <num workers>
 
-
+python scripts/convert_xlsx_to_csv.py <input_dir_of_excel_sheets> --output-dir <output_dir_csv>
 
 ### Deployment to Agent Engine
 ```

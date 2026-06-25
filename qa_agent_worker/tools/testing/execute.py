@@ -97,7 +97,7 @@ def _execute_test_case(
         actual_user = ActualMessage(text=user_text, event=event, dtmf=dtmf, vars=dict(send_vars))
 
         # Send utterance to CX Agent using text modality
-        logging.info("  [EXECUTE {test_case.modality.upper()}] Sending request to CX Agent...")
+        logging.info(f"  [EXECUTE {test_case.modality.upper()}] Sending request to CX Agent...")
 
         response = send_message_to_cx_agent(**user_message)
 

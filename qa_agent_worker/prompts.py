@@ -67,8 +67,8 @@ You will be given the following information, here is a guide to understanding th
             - [Agent_Expect_Any]: The agent can say anything for one turn, as long as it says something. 
         
         If it says that the [Caller] need to:
-            - say no input/no-input, you must send it as an event as '<context>no user activity detected for 90 seconds</context>'
-            - enter or press a DTMF digit, e.g., press 1, you must send it using this format 'pressed <dtmf_digit> on keypad' exactly
+            - say no input/no-input, you must send it as a text exactly as '<context>no user activity detected'
+            - enter or press DTMF digits, e.g., press 123#, you must send it as a dtmf. For exmaple, "dtmf": "123#" 
             - say no match, just must say 'no-match' exactly
 
         Once you reach the end of [Agent] and [Caller] tags and there are no more specified instructions. YOU MUST STOP AND NOT CONTINUE THE CONVERSATION. 
