@@ -15,7 +15,7 @@
 from datetime import datetime
 import random
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Literal
 
 from google.adk.tools import ToolContext
 
@@ -176,7 +176,7 @@ def send_message_to_cx_agent(
     event: Optional[str] = None,
     dtmf: Optional[str] = None,
     session_variables: Optional[Dict[str, str]] = {},
-    modality: str = "text",
+    modality: Literal["text", "audio"] = "text",
 ) -> Dict[str, Any]:
     """Sends a message to CX Agent and returns text, tool calls, and session variables.
 
@@ -189,7 +189,7 @@ def send_message_to_cx_agent(
         event (str): Optional. Event to send to the agent.
         dtmf (str): Optional. DTMF to send to the agent.
         session_variables (Dict[str, str]): Optional. key-value pair of session variables to send
-        modality (str): The interaction modality, 'text' or 'voice'. Defaults to text.
+        modality Litera["text", "audio"]: The interaction modality, 'text' or 'audio'. Defaults to text.
 
     Returns:
         dict:
@@ -212,7 +212,7 @@ def send_message_to_cx_agent(
             "session_id": session_id,
         }
 
-        if modality == "voice":
+        if modality == "audio":
             run_request.update({"modality": "audio"})
         else:
             run_request.update({"modality": "text"})

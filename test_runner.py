@@ -92,7 +92,7 @@ def clean_json_response(text: str) -> str:
         text = text[:-3]
     return text.strip()
 
-async def process_csv(input_csv: str, results_dir: str, project_id: str, region: str, app_id: str, modality: str = "text", max_parallel_workers: int = 1):
+async def process_csv(input_csv: str, results_dir: str, project_id: str, region: str, app_id: str, modality: str = "text", max_parallel_workers: int = 1, rows: set[int] | None = None):
     # 1. Create a timestamped folder within results_dir
     timestamp = datetime.now().strftime("%Y%m%d_%H_%M_%S")
     output_folder = os.path.join(results_dir, timestamp)
@@ -220,6 +220,8 @@ async def process_csv(input_csv: str, results_dir: str, project_id: str, region:
 
         for index, row in enumerate(reader):
             row_num = index + 1
+            if rows is not None and row_num not in rows:
+                continue
             tasks.append(process_row(row_num, row))
 
     all_results = await asyncio.gather(*tasks)
@@ -232,6 +234,39 @@ async def process_csv(input_csv: str, results_dir: str, project_id: str, region:
         indexfile.write(index_html)
 
     print("Done!")
+
+
+def parse_rows(rows_str: str) -> set[int]:
+    """Parses a row selection string (e.g. '1,2,5-7, 9') into a set of 1-based row indices."""
+    if not rows_str:
+        return set()
+    rows = set()
+    for part in rows_str.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if '-' in part:
+            parts = part.split('-')
+            if len(parts) == 2:
+                start_str, end_str = parts[0].strip(), parts[1].strip()
+                if start_str and end_str:
+                    try:
+                        start = int(start_str)
+                        end = int(end_str)
+                        if start <= end:
+                            rows.update(range(start, end + 1))
+                        else:
+                            rows.update(range(end, start + 1))
+                        continue
+                    except ValueError:
+                        pass
+            raise argparse.ArgumentTypeError(f"Invalid row range: '{part}' in '{rows_str}'")
+        else:
+            try:
+                rows.add(int(part))
+            except ValueError:
+                raise argparse.ArgumentTypeError(f"Invalid row number: '{part}' in '{rows_str}'")
+    return rows
 
 
 def main():
@@ -259,6 +294,13 @@ def main():
         default=1,
         help="Maximum number of parallel workers to run test cases at any time"
     )
+
+    parser.add_argument(
+        "--rows",
+        type=parse_rows,
+        default=None,
+        help="Specific rows to process (e.g., '1,2,5-7' or '1-5,7,9'). If not provided, all rows are processed."
+    )
     
     args = parser.parse_args()
 
@@ -270,7 +312,8 @@ def main():
         args.region, 
         args.app_id, 
         args.modality,
-        args.MAX_PARALLEL_WORKERS
+        args.MAX_PARALLEL_WORKERS,
+        args.rows
     ))
 
 # -----------------------------------------------------------------------------
